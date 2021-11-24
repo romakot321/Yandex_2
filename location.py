@@ -13,8 +13,8 @@ class Location:
             self.name = name
             self.characters = []
             self.blocks_sprites = pygame.sprite.Group()
-            for y in range(CHUNK_SIZE, HEIGHT, CHUNK_SIZE):
-                for x in range(CHUNK_SIZE, WIDTH, CHUNK_SIZE):
+            for y in range(0, HEIGHT * 2, BLOCK_SIZE):
+                for x in range(0, WIDTH * 2, BLOCK_SIZE):
                     self.blocks_sprites.add(Block(x, y))
             Handler.save_locations_params(**self.__dict__)
 
@@ -22,7 +22,16 @@ class Location:
 class Block(pygame.sprite.Sprite):
     def __init__(self, x, y):
         pygame.sprite.Sprite.__init__(self)
-        self.image = pygame.Surface((CHUNK_SIZE, CHUNK_SIZE))
+        self.image = pygame.Surface((BLOCK_SIZE, BLOCK_SIZE))
+        self.image.fill(DARK_GREEN if randint(0, 1) == 1 else FOREST_GREEN)
+        self.rect = self.image.get_rect()
+        self.rect.center = (x, y)
+
+
+class Structure(pygame.sprite.Sprite):
+    def __init__(self, x, y, name):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.Surface((BLOCK_SIZE, BLOCK_SIZE))
         self.image.fill(DARK_GREEN if randint(0, 1) == 1 else FOREST_GREEN)
         self.rect = self.image.get_rect()
         self.rect.center = (x, y)

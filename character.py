@@ -13,9 +13,10 @@ class Character(pygame.sprite.Sprite):
         self.image.fill(DARK_RED)
         self.rect = self.image.get_rect()
         self.rect.center = (400, 300)
+        self.velocity = pygame.math.Vector2(0, 0)
         self.lasttime = datetime.now()
 
     def update(self):
         if (datetime.now() - self.lasttime).seconds > 3:  # Совершение случайного действия раз в 3 секунды
             self.lasttime = datetime.now()
-            choice(Character.ACTIONS)(self.rect)
+            choice(Character.ACTIONS)(self.velocity)

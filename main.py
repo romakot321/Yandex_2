@@ -26,8 +26,10 @@ while running:
 
     # Рендеринг
     screen.fill(BLACK)
-    loc1.blocks_sprites.draw(screen)
-    all_sprites.draw(screen)
+    for sprite in loc1.blocks_sprites:
+        screen.blit(sprite.image, sprite.rect.topleft + chr.velocity)
+    for sprite in all_sprites:
+        screen.blit(sprite.image, sprite.rect.topleft)
     # После отрисовки всего, переворачиваем экран
     pygame.display.flip()
 

@@ -1,5 +1,6 @@
 import sqlite3
 from typing import Dict, Any
+from config import locations_list
 
 
 class Handler:
@@ -10,7 +11,7 @@ class Handler:
     def get_locations_params(loc_name) -> tuple:
         # TODO получение всех параметвор локации, вовращает None если такой локации нет
         # Иначе возвращает параметры в виде (param_name, param_value)
-        pass
+        return locations_list.get(loc_name, None)
 
     @staticmethod
     def save_locations_params(**params: Dict[str, Any]):

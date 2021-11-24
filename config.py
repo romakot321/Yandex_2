@@ -1,7 +1,7 @@
 # --- Константы
 WIDTH = 800
 HEIGHT = 650
-CHUNK_SIZE = 50
+BLOCK_SIZE = 50
 FPS = 30
 
 # --- Цвета
@@ -15,13 +15,25 @@ DARK_GREEN = (0, 71, 49)
 FOREST_GREEN = (11, 102, 35)
 BLUE = (0, 0, 255)
 
+# --- Данные
+locations_list: dict = {
+    'loc1': {
+
+    }
+}
+structures_list = {
+    'House': {
+        'color': RED
+    }
+}
+
 
 # --- Вспомогательные функции
 def up(rect):
-    rect.y -= CHUNK_SIZE
+    rect.y -= BLOCK_SIZE
 def down(rect):
-    rect.y += CHUNK_SIZE
+    rect.y += BLOCK_SIZE
 def left(rect):
-    rect.x -= CHUNK_SIZE
+    rect.x -= BLOCK_SIZE
 def right(rect):
-    rect.x += CHUNK_SIZE
+    rect.x += BLOCK_SIZE
