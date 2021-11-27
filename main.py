@@ -10,8 +10,9 @@ pygame.display.set_caption("Random Game")
 clock = pygame.time.Clock()
 
 all_sprites = pygame.sprite.Group()
+for locname, params in locations_list.items():
+    Location(locname, params['minx'], params['miny'], params['maxx'], params['maxy'])
 chr = Character()
-loc1 = Location('location')
 all_sprites.add(chr)
 
 running = True
@@ -26,8 +27,10 @@ while running:
 
     # Рендеринг
     screen.fill(BLACK)
-    for sprite in loc1.blocks_sprites:
-        screen.blit(sprite.image, sprite.rect.topleft + chr.velocity)
+    for sprite in Location.get_location(chr.velocity.x, chr.velocity.y).blocks_sprites:
+        screen.blit(sprite.image, sprite.rect.topleft - chr.velocity)
+        # Эффект передвижение камеры реализуется за счет вычитания вектора из координат спрайта
+        # Так спрайты выходят за экран, и их не видно.
     for sprite in all_sprites:
         screen.blit(sprite.image, sprite.rect.topleft)
     # После отрисовки всего, переворачиваем экран
