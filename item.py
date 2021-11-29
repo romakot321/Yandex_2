@@ -46,6 +46,9 @@ class Inventory:
         for s in self.slots:
             s.item = None
 
+    def itemsList(self) -> list:
+        return [s.item for s in self.slots]
+
     def __eq__(self, other):
         if isinstance(other, bool):  # Пустой ли инвентарь
             if all([s.item is None for s in self.slots]):

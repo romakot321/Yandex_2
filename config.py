@@ -24,6 +24,7 @@ BROWN = (139, 69, 19)
 SAND = (252, 221, 118)
 LIGHT_SAND = (255, 236, 139)
 DARK_SAND = (214, 165, 4)
+SKINCOLOR = (245, 245, 220)
 
 # --- Данные
 locations_list: dict = {
@@ -121,3 +122,40 @@ def right(velocity, rect):
     else:
         if rect.centerx + BLOCK_SIZE <= WIDTH // 2:
             rect.centerx += BLOCK_SIZE
+
+
+# --- Вспомогательные классы
+class Quest:
+    def __init__(self, name, target: 'Target', owner):
+        """Конструктор Квеста
+
+        :param name: Название
+        :param target: Цель для завершения квеста
+        :param owner: Тот, кто выдал квест
+        """
+        self.name = name
+        self.target = target
+        self.owner = owner
+
+
+class Target:
+    def __init__(self, typ: str, obj, count: str):
+        """Конструктор Цели для квеста
+
+        :param typ: Тип цели(collect, kill)
+        :param obj: Обьект для достижения цели (Item, Enemy)
+        :param count: Кол-во обьектов для достижения цели
+        """
+        self.typ = typ
+        self.obj = obj
+        self.count = count
+
+    def check_done(self, hero):
+        """Проверка на выполнение квеста"""
+        if self.typ == 'collect':
+            if hero.inventory.itemsList().count(self.obj) >= self.count:
+                return True
+        elif self.typ == 'kill':
+            if hero.kills_counter.get(self.obj.name, 0) >= self.count:
+                return True
+        return False
