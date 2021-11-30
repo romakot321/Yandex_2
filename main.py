@@ -48,12 +48,13 @@ while running:
     hero.velocity += cam_move
     all_sprites.update()
     curr_loc = Location.get_location(hero.velocity.x, hero.velocity.y)
-    for strc in curr_loc.structures_list:  # Проверка на коллизию со структурами
-        if strc.rect.collidepoint(hero.velocity.x + WIDTH // 2, hero.velocity.y + (HEIGHT // 2 - 25)):
-            # Прибавление т.к. нулевые координаты у камеры смещены
-            if strc.inventory == True:  # Не изменять, особенности ООП:)
-                hero.inventory.append(strc.inventory)
-                strc.inventory.clear()
+    if curr_loc:  # TODO Иначе если вышли за карту?
+        for strc in curr_loc.structures_list:  # Проверка на коллизию со структурами
+            if strc.rect.collidepoint(hero.velocity.x + WIDTH // 2, hero.velocity.y + (HEIGHT // 2 - 25)):
+                # Прибавление т.к. нулевые координаты у камеры смещены
+                if strc.inventory == True:  # Не изменять, особенности ООП:)
+                    hero.inventory.append(strc.inventory)
+                    strc.inventory.clear()
 
     # Рендеринг
     screen.fill(BLACK)

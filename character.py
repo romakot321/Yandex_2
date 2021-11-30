@@ -3,10 +3,11 @@ import pygame
 from datetime import datetime
 from random import choice
 from item import Inventory
+from typing import Tuple, List, Set
 
 
 class Character(pygame.sprite.Sprite):
-    def __init__(self, x, y, color=SKINCOLOR):
+    def __init__(self, x: int, y: int, color: Tuple[int, int, int]=SKINCOLOR):
         """Конструктор класса персонаж. Персонаж это НПС, враг и герой"""
         pygame.sprite.Sprite.__init__(self)
         self.image = pygame.Surface((40, 40))
@@ -31,7 +32,8 @@ class Hero(Character):
         self.lasttime = datetime.now()
         self.is_moving = True
         self.inventory = Inventory(self, 6)
-        self.equipment = Inventory(self, 5, ('head', 'body', 'legs', 'boots', 'hands'))
+        self.equipment = Inventory(self, 5, ('head', 'body', 'legs', 
+                                             'boots', 'hands'))
 
         self.kills_counter = {}
 
@@ -41,9 +43,21 @@ class Hero(Character):
             self.lasttime = datetime.now()
             choice(self.ACTIONS)(self.velocity, self.rect)
 
+    def add_velocity(self, value: tuple):
+        self.velocity += value
+    
+    def set_velocity(self, *args):
+        if isinstance(args[0], tuple):
+            value = args[0]
+        else:
+            value = args
+        assert len(value) == 2
+        self.velocity = pygame.math.Vector2(value)
+
+
 
 class NPC(Character):
-    def __init__(self, x, y, loc, structure=None):
+    def __init__(self, x: int, y: int, loc, structure=None):
         """Конструктор класса НПС(мирный)
 
         :param loc: Прикрепление к локации
@@ -58,7 +72,7 @@ class NPC(Character):
 
 
 class Enemy(Character):
-    def __init__(self, x, y, name, loc, structure=None):
+    def __init__(self, x: int, y: int, name: str, loc, structure=None):
         """Конструктор класса Враг
 
         :param loc: Прикрепление к локации
