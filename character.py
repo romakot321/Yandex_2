@@ -11,11 +11,17 @@ class Character(pygame.sprite.Sprite):
         """Конструктор класса персонаж. Персонаж это НПС, враг и герой"""
         pygame.sprite.Sprite.__init__(self)
         self.image = pygame.Surface((40, 40))
-        self.image.fill(SKINCOLOR)
+        self.image.fill(color)
         self.rect = self.image.get_rect()
         self.rect.center = (x, y)
         self.health = 100
         self.inventory = Inventory(self, 3)  # У каждого персонажа есть инвентарь
+
+    def onDeath(self, *args, **kwargs):
+        pass
+
+    def __str__(self):
+        return f'{self.health}'
 
 
 class Hero(Character):
@@ -55,20 +61,44 @@ class Hero(Character):
         self.velocity = pygame.math.Vector2(value)
 
 
-
 class NPC(Character):
-    def __init__(self, x: int, y: int, loc, structure=None):
+    ACTIONS = (up, left, right, down)
+
+    def __init__(self, x: int, y: int, name: str, loc, structure=None):
         """Конструктор класса НПС(мирный)
 
         :param loc: Прикрепление к локации
         :param structure: Прикрепление к структуре(необяз)
         """
-        Character.__init__(self, x, y)
+        Character.__init__(self, x, y, SKINCOLOR)
         self.loc = loc
+        self.name = name
         self.structure = structure
         self.quests = []
         self.sell_items = []
+        self.lasttime = datetime.now()
+        self.loc.characters.append(self)
         # TODO Диалог с героем для квестов и торговли
+
+    def update(self):
+        if (datetime.now() - self.lasttime).seconds > 0.5:
+            self.lasttime = datetime.now()
+            if self.structure:
+                choice(self.ACTIONS)(self.rect, None,
+                                     (self.structure.x - BLOCK_SIZE * 4, self.structure.y - BLOCK_SIZE * 4),
+                                     (self.structure.x + BLOCK_SIZE * 4, self.structure.y + BLOCK_SIZE * 4))
+            else:
+                choice(self.ACTIONS)(self.rect, None,
+                                     (self.loc.minx, self.loc.miny),
+                                     (self.loc.maxx, self.loc.maxy))
+
+    def fullDescription(self):
+        s = f'Имя: {self.name}\nТип: NPC\n{"Есть квесты" if self.quests else ""}\n'
+        s += f'{"Есть предметы на продажу" if self.sell_items else ""}'
+        return s
+
+    def __str__(self):
+        return f'{self.name}(HP: {self.health})'
 
 
 class Enemy(Character):
@@ -85,6 +115,6 @@ class Enemy(Character):
         self.equipment = Inventory(self, 5, ('head', 'body', 'legs', 'boots', 'hands'))
         # TODO Система боя с героем (получение характеристик)
 
-    def death(self, killer):
+    def onDeath(self, killer):
         if isinstance(killer, Hero):
             killer.kills_counter[self.name] = killer.kills_counter.get(self.name, 0) + 1

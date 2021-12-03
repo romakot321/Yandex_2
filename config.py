@@ -6,7 +6,7 @@ WIDTH = 800
 HEIGHT = 650
 # нулевые координаты для камеры - WIDTH // 2, HEIGHT // 2 - 25
 BLOCK_SIZE = 50
-FPS = 10
+FPS = 15
 
 # --- Цвета
 WHITE = (255, 255, 255)
@@ -92,35 +92,37 @@ structure_items_list = [
 
 
 # --- Вспомогательные функции
-def up(velocity, rect):
-    if velocity.y - BLOCK_SIZE >= 0:
+def up(velocity, rect, mincoords=(0, 0), maxcoords=(WIDTH * 20, HEIGHT * 20)):
+    if velocity.y - BLOCK_SIZE >= mincoords[1]:
         velocity.y -= BLOCK_SIZE
     else:
-        if rect.centery - BLOCK_SIZE >= 0:
+        if rect is not None and rect.centery - BLOCK_SIZE >= 0:
             rect.centery -= BLOCK_SIZE
 
 
-def down(velocity, rect):
-    if velocity.y + BLOCK_SIZE <= HEIGHT * 20 and rect.centery == HEIGHT // 2:
-        velocity.y += BLOCK_SIZE
+def down(velocity, rect, mincoords=(0, 0), maxcoords=(WIDTH * 20, HEIGHT * 20)):
+    if velocity.y + BLOCK_SIZE <= maxcoords[1]:
+        if rect is None or rect.centery == HEIGHT // 2:
+            velocity.y += BLOCK_SIZE
     else:
-        if rect.centery + BLOCK_SIZE <= HEIGHT // 2:
+        if rect is not None and rect.centery + BLOCK_SIZE <= HEIGHT // 2:
             rect.centery += BLOCK_SIZE
 
 
-def left(velocity, rect):
-    if velocity.x - BLOCK_SIZE >= 0:
+def left(velocity, rect, mincoords=(0, 0), maxcoords=(WIDTH * 20, HEIGHT * 20)):
+    if velocity.x - BLOCK_SIZE >= mincoords[0]:
         velocity.x -= BLOCK_SIZE
     else:
-        if rect.centerx - BLOCK_SIZE >= 0:
+        if rect is not None and rect.centerx - BLOCK_SIZE >= 0:
             rect.centerx -= BLOCK_SIZE
 
 
-def right(velocity, rect):
-    if velocity.x + BLOCK_SIZE <= WIDTH * 20 and rect.centerx == WIDTH // 2:
-        velocity.x += BLOCK_SIZE
+def right(velocity, rect, mincoords=(0, 0), maxcoords=(WIDTH * 20, HEIGHT * 20)):
+    if velocity.x + BLOCK_SIZE <= maxcoords[0]:
+        if rect is None or rect.centerx == WIDTH // 2:
+            velocity.x += BLOCK_SIZE
     else:
-        if rect.centerx + BLOCK_SIZE <= WIDTH // 2:
+        if rect is not None and rect.centerx + BLOCK_SIZE <= WIDTH // 2:
             rect.centerx += BLOCK_SIZE
 
 
