@@ -1,14 +1,29 @@
+from typing import List
+
+
+available_itemstats = '''
+    damage(0...),
+    armor(0...),
+    drop_chance(0.01...1.00)\tШанс выпадения после смерти,
+    price(0...) Цена для продажи,
+'''
+
+
 class Inventory:
-    def __init__(self, owner, slots_count, slots_name=None, slots_items=None):
+    def __init__(self, owner, slots_count, slots_name=None, slots_items=None,
+                 linked_inv=None):
         """Конструктор класса Инвентарь
 
         :param owner: Владелец инвентаря(обьект)
         :param slots_count: Кол-во слотов
         :param slots_name: Названия слотов в виде (slot0_name, slot1_name...), необяз
         :param slots_items: Список предметов в слотах
+        :param linked_inv: Связанный с этим инвентарь(для авто перекладывания вещей)
+        При его указания вещи сначала ложатся в связанный, а затем в основной инвентарь
         """
         self.owner = owner
         self.slots = [Slot(None, str(i)) for i in range(slots_count)]
+        self.linked_inv = linked_inv
         if slots_name is not None:
             for i, name in enumerate(slots_name):
                 self.slots[i].name = name
@@ -25,20 +40,38 @@ class Inventory:
 
     def setSlotItem(self, slot_name, item):
         slot_name = str(slot_name)
+        if self.linked_inv:
+            slot = [i for i in self.linked_inv.slots if i.name == slot_name][0]
+            slot.item = item
+            return
         try:
             slot = [i for i in self.slots if i.name == slot_name][0]
             slot.item = item
         except IndexError:
             pass
 
-    def append(self, other_inv):
+    def append(self, other_inv: 'Inventory'):
         """Добавление предметов из другого инвенторя"""
-        i = 0
+        if isinstance(other_inv, Inventory):
+            items = [i for i in other_inv.itemsList() if i is not None]
+        else:
+            items = other_inv
+        if self.linked_inv:
+            for s in self.linked_inv.slots:
+                if s.item is None:
+                    for i in items:
+                        if i.for_slot is not None and i.for_slot == s.name:
+                            s.item = items.pop(items.index(i))
+                            break
+                    if len(items) == 0:
+                        return
         for s in self.slots:
             if s.item is None:
-                s.item = other_inv.slots[i].item
-                i += 1
-                if i > len(other_inv.slots) - 1:
+                for i in items:
+                    if i.for_slot is None or i.for_slot is not None and i.for_slot == s.name:
+                        s.item = items.pop(items.index(i))
+                        break
+                if len(items) == 0:
                     break
 
     def clear(self):
@@ -46,8 +79,14 @@ class Inventory:
         for s in self.slots:
             s.item = None
 
-    def itemsList(self) -> list:
+    def itemsList(self, without_none=False) -> List['Item']:
+        if without_none:
+            return [s.item for s in self.slots if s.item]
         return [s.item for s in self.slots]
+
+    def full(self):
+        """Проверка на полный инвентарь"""
+        return all([s.item is not None for s in self.slots])
 
     def __eq__(self, other):
         if isinstance(other, bool):  # Пустой ли инвентарь
@@ -64,6 +103,12 @@ class Inventory:
         else:
             self.setSlotItem(slot_name, item)
 
+    def __str__(self):
+        s = ''
+        for slot in self.slots:
+            s += f'{slot.name}) {slot.item}\n'
+        return s
+
 
 class Slot(Inventory):
     def __init__(self, item: 'Item', name: str):
@@ -79,10 +124,17 @@ class Item:
         :param stats: Словарь статов предмета(например {'damage': 5}
         :param for_slot: Для слота с определнным названием
         """
+        if stats is None:
+            stats = {}
         self.name = name
         self.type = type
         self.for_slot = for_slot
         self.stats = stats
+
+    def __getattr__(self, item):
+        if item in self.__dict__:
+            return self.__dict__[item]
+        return self.stats.get(item, None)
 
     def __str__(self):
         return self.name
