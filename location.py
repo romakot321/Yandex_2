@@ -57,10 +57,10 @@ class Location:
         ret = []
         if loc is not None:
             sprites = list(loc.blocks_sprites)
-            if x + WIDTH > loc.maxx:
+            if WIDTH * 18 > x + WIDTH > loc.maxx:
                 sprites = sprites + list(Location.get_location(x + 2 * WIDTH,
                                                                y).blocks_sprites)
-            if y + HEIGHT + 25 > loc.maxy:
+            if HEIGHT * 18 > y + HEIGHT + 25 > loc.maxy:
                 sprites = sprites + list(Location.get_location(x,
                                                                y + 2 * HEIGHT).blocks_sprites)
             for s in sprites:

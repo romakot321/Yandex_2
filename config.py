@@ -1,6 +1,8 @@
 # --- Константы
 import datetime
 import random
+from typing import List
+
 from item import Item
 
 WIDTH = 800
@@ -11,6 +13,7 @@ FPS = 15
 
 # --- Цвета
 WHITE = (255, 255, 255)
+FONT_TEXT = (68, 68, 68)
 GRAY = (128, 128, 128)
 LIGHT_GRAY = (160, 160, 164)
 DARK_GRAY = (41, 59, 51)
@@ -65,14 +68,68 @@ structures_list = {
         'color': (RED,),
         'x': WIDTH // 2,
         'y': HEIGHT // 2 - 25
+    },
+    'House2': {
+        'location_name': 'loc1',
+        'color': (RED,),
+        'x': 1000,
+        'y': 1000
+    },
+    'House3': {
+        'location_name': 'loc1',
+        'color': (RED,),
+        'x': 1200,
+        'y': 1000
+    },
+    'House4': {
+        'location_name': 'loc1',
+        'color': (RED,),
+        'x': 1400,
+        'y': 1000
+    },
+    'House5': {
+        'location_name': 'loc1',
+        'color': (RED,),
+        'x': 1600,
+        'y': 1000
+    },
+    'House21': {
+        'location_name': 'loc1',
+        'color': (RED,),
+        'x': 1000,
+        'y': 1100
+    },
+    'House31': {
+        'location_name': 'loc1',
+        'color': (RED,),
+        'x': 1200,
+        'y': 1100
+    },
+    'House41': {
+        'location_name': 'loc1',
+        'color': (RED,),
+        'x': 1400,
+        'y': 1100
+    },
+    'House51': {
+        'location_name': 'loc1',
+        'color': (RED,),
+        'x': 1600,
+        'y': 1100
+    },
+    'House6': {
+        'location_name': 'болото',
+        'color': (RED,),
+        'x': 3000,
+        'y': 800
     }
 }
 structure_items_list = [
-    (3, Item('золото', price=10)),
+    (10, Item('золото', price=10)),
     (1, Item('стеклянный меч', 'equipment', 'hands', damage=15, drop_chance=0.1, price=50)),
     (5, Item('кости', price=1)),
     (5, Item('кирпич пыли')),
-    (3, Item('Топорик', 'equipment', 'hands', damage=5, drop_chance=0.9, price=5))
+    (3, Item('Топорик', 'equipment', 'hands', damage=5, drop_chance=0.9, price=10))
 ]  # Вид (weight(для random.choices), Item)
 equipment_items_list = [
     Item('Кожаная куртка', 'equipment', 'body', armor=2, drop_chance=0.8, price=5),
@@ -83,59 +140,46 @@ equipment_items_list = [
 epic_items_list = [
     Item('Ban hammer', 'equipment', 'hands', damage=100)
 ]
-
-
-# --- Вспомогательные функции
-def up(velocity, rect, mincoords=(0, 0), maxcoords=(WIDTH * 20, HEIGHT * 20)):
-    if velocity.y - BLOCK_SIZE >= mincoords[1]:
-        velocity.y -= BLOCK_SIZE
-    else:
-        if rect is not None and rect.centery - BLOCK_SIZE >= 0:
-            rect.centery -= BLOCK_SIZE
-
-
-def down(velocity, rect, mincoords=(0, 0), maxcoords=(WIDTH * 20, HEIGHT * 20)):
-    if velocity.y + BLOCK_SIZE <= maxcoords[1]:
-        if rect is None or rect.centery == HEIGHT // 2:
-            velocity.y += BLOCK_SIZE
-    else:
-        if rect is not None and rect.centery + BLOCK_SIZE <= HEIGHT // 2:
-            rect.centery += BLOCK_SIZE
-
-
-def left(velocity, rect, mincoords=(0, 0), maxcoords=(WIDTH * 20, HEIGHT * 20)):
-    if velocity.x - BLOCK_SIZE >= mincoords[0]:
-        velocity.x -= BLOCK_SIZE
-    else:
-        if rect is not None and rect.centerx - BLOCK_SIZE >= 0:
-            rect.centerx -= BLOCK_SIZE
-
-
-def right(velocity, rect, mincoords=(0, 0), maxcoords=(WIDTH * 20, HEIGHT * 20)):
-    if velocity.x + BLOCK_SIZE <= maxcoords[0]:
-        if rect is None or rect.centerx == WIDTH // 2:
-            velocity.x += BLOCK_SIZE
-    else:
-        if rect is not None and rect.centerx + BLOCK_SIZE <= WIDTH // 2:
-            rect.centerx += BLOCK_SIZE
+drop_items_list = [
+    Item('кости', price=1)
+]
 
 
 # --- Вспомогательные классы
 class Quest:
-    def __init__(self, name, target: 'Target', owner):
+    def __init__(self, name, target: 'Target', owner, reward: List['Item']):
         """Конструктор Квеста
 
         :param name: Название
         :param target: Цель для завершения квеста
         :param owner: Тот, кто выдал квест
+        :param reward: Вознаграждение за выполнение
         """
         self.name = name
         self.target = target
         self.owner = owner
+        self.reward = reward
+
+    def pass_quest(self, hero):
+        if self.target.check_done(hero):
+            for i in self.reward:
+                if isinstance(i, str) and 'coins' in i:
+                    hero.coins += int(i.replace('coins', '').strip())
+                    self.reward.remove(i)
+                    break
+            hero.inventory.append(self.reward)
+            if self.target.typ == 'collect':
+                hero.inventory.clear(self.target.obj, self.target.count)
+            hero.quests.remove(self)
+            return True
+        return False
+
+    def text(self):
+        return str(self.target)
 
 
 class Target:
-    def __init__(self, typ: str, obj, count: str):
+    def __init__(self, typ: str, obj, count: int):
         """Конструктор Цели для квеста
 
         :param typ: Тип цели(collect, kill)
@@ -155,6 +199,14 @@ class Target:
             if hero.kills_counter.get(self.obj.name, 0) >= self.count:
                 return True
         return False
+
+    def __str__(self):
+        s = ''
+        if self.typ == 'collect':
+            s += f'Собери {self.count} {self.obj}'
+        elif self.typ == 'kill':
+            s += f'Убей {self.count} {self.obj}'
+        return s
 
 
 class Fight:
@@ -217,3 +269,29 @@ class Fight:
             self.journal += f'{self.attacker.name} бьет {self.target.name} на {dmg}HP\n'
         self.journal = '\n'.join(self.journal.split('\n')[:5])
         return x, y, f'-{dmg}HP'
+
+
+class Dialog:
+    def __init__(self, hero, character, text: list):
+        self.hero = hero
+        self.character = character
+        self.text = text
+        self.character_say = True  # Очередь говорить
+        self.lasttime = datetime.datetime.now()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.text:
+            t = self.text.pop(0)
+            if isinstance(t, list):
+                t = t[0]
+            t = t.split('$')
+            if self.character_say:
+                x, y = self.character.onWindowPos()
+            else:
+                x, y = self.hero.onWindowPos()
+            self.character_say = not self.character_say
+            y -= BLOCK_SIZE // 2 * len(t)
+            return x, y, t

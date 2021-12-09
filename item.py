@@ -1,4 +1,5 @@
-from typing import List
+import copy
+from typing import List, Union
 
 
 available_itemstats = '''
@@ -50,34 +51,58 @@ class Inventory:
         except IndexError:
             pass
 
-    def append(self, other_inv: 'Inventory'):
+    def append(self, other_inv: Union['Inventory', list]):
         """Добавление предметов из другого инвенторя"""
         if isinstance(other_inv, Inventory):
-            items = [i for i in other_inv.itemsList() if i is not None]
+            items = other_inv.itemsList(without_none=True)
         else:
             items = other_inv
+        if len([i for i in self.slots if i.item is None]) < len(items):
+            self.clear(trash=True)
         if self.linked_inv:
             for s in self.linked_inv.slots:
                 if s.item is None:
                     for i in items:
                         if i.for_slot is not None and i.for_slot == s.name:
-                            s.item = items.pop(items.index(i))
+                            s.item = items.pop(items.index(i)).copy()
                             break
                     if len(items) == 0:
                         return
         for s in self.slots:
             if s.item is None:
                 for i in items:
-                    if i.for_slot is None or i.for_slot is not None and i.for_slot == s.name:
-                        s.item = items.pop(items.index(i))
+                    if i.for_slot is None or i.for_slot == s.name:
+                        s.item = items.pop(items.index(i)).copy()
                         break
                 if len(items) == 0:
                     break
 
-    def clear(self):
-        """Отчистка всех слотов"""
+    def clear(self, item=None, count=1, trash=False):
+        """Отчистка всех слотов
+        item, count - Определенный предмет в опр кол-ве
+        trash=True - Мусор"""
+        if trash:
+            q_items = []  # Quest items
+            if 'move_to' in self.owner.__dict__:
+                q_items = [q.target.obj for q in self.owner.quests if q.target.typ == 'collect']
+            t = []
+            for i in self.itemsList(without_none=True):
+                if i.price in range(0, 6) and i not in q_items:
+                    t.append(i)
+            if 'move_to' in self.owner.__dict__ and self.full():
+                self.owner.SUBACTIONS[0](self.owner)
         for s in self.slots:
-            s.item = None
+            if item:
+                if s.item == item and count > 0:
+                    s.item = None
+                    count -= 1
+                elif count == 0:
+                    break
+            elif trash:
+                if s.item in t:
+                    s.item = None
+            else:
+                s.item = None
 
     def itemsList(self, without_none=False) -> List['Item']:
         if without_none:
@@ -87,6 +112,9 @@ class Inventory:
     def full(self):
         """Проверка на полный инвентарь"""
         return all([s.item is not None for s in self.slots])
+
+    def contains(self, item):
+        return item in self.itemsList()
 
     def __eq__(self, other):
         if isinstance(other, bool):  # Пустой ли инвентарь
@@ -131,10 +159,18 @@ class Item:
         self.for_slot = for_slot
         self.stats = stats
 
+    def copy(self):
+        return Item(self.name, self.type, self.for_slot, **self.stats)
+
     def __getattr__(self, item):
         if item in self.__dict__:
             return self.__dict__[item]
-        return self.stats.get(item, None)
+        return self.stats.get(item, 0)
 
     def __str__(self):
         return self.name
+
+    def __eq__(self, other):
+        if isinstance(other, Item):
+            return self.name == other.name and self.type == other.type \
+                   and self.stats == other.stats

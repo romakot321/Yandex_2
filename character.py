@@ -1,9 +1,11 @@
 from config import *
 import pygame
 from datetime import datetime
-from random import choice
+from random import choice, randint
 from item import Inventory
-from typing import Tuple, List, Set
+from typing import Tuple, List, Set, Union
+from DBHandler import Handler
+from funcs import *
 
 
 class Character(pygame.sprite.Sprite):
@@ -33,7 +35,8 @@ class Character(pygame.sprite.Sprite):
 
 
 class Hero(Character):
-    ACTIONS = (right, down, left, up)  # кортеж действий, хранящий функции(из config)
+    ACTIONS = (complete_quest,)  # кортеж действий, хранящий функции(из config)
+    SUBACTIONS = (hero_sell_items,)
     hero_object: 'Hero' = None
 
     def __init__(self):
@@ -47,23 +50,72 @@ class Hero(Character):
         self.velocity = pygame.math.Vector2(0, 0)
         self.lasttime = datetime.now()
         self.is_moving = True
-        self.equipment = Inventory(self, 5, ('head', 'body', 'legs', 
+        self.equipment = Inventory(self, 5, ('head', 'body', 'legs',
                                              'boots', 'hands'))
-        self.inventory = Inventory(self, 6, linked_inv=self.equipment)
+        self.inventory = Inventory(self, 10, linked_inv=self.equipment)
+        self.coins = 5
+        self._curr_loc = None
 
         self.kills_counter = {}
         self.curr_fight = None
         Hero.hero_object = self
 
+        self.quests: List['Quest'] = []
+        self.move_to = None
+        self.queue_move_to = []
+        self.task = ''
+
     def update(self):
         if (datetime.now() - self.lasttime).seconds > 0.5 and self.is_moving and self.curr_fight is None:
             # Совершение случайного действия раз в 3 секунды
             self.lasttime = datetime.now()
-            choice(self.ACTIONS)(self.velocity, self.rect)
+            if self.move_to:
+                # TODO Следование по заданному алгоритмом пути
+                if isinstance(self.move_to, NPC):  # Проверка на нахождение рядом с целью(НПС)
+                    x, y = self.move_to.onWorldPos()
+                    # y = self.move_to.rect.center[1] - self.velocity.y
+                    # Если на расстоянии 3-ех блоков...
+                    if x in range(int(self.rect.centerx + self.velocity.x - 100),
+                                  int(self.rect.centerx + self.velocity.x + 100)) \
+                            and y in range(int(self.rect.centery + self.velocity.y - 100),
+                                           int(self.rect.centery + self.velocity.y + 100)):
+                        if self.task.lower() == 'pass quest':
+                            if self.quests[0].target.check_done(self):
+                                self.move_to.dialog(quest='pass')
+                                self.move_to = None
+                        elif self.task.lower() == 'get quest':
+                            if len(self.move_to.quests) > 0:
+                                self.move_to.dialog(quest='get')
+                                self.task = ''
+                                self.move_to = None
+                        elif self.task.lower() == 'trade sell':
+                            self.task = ''
+                            self.move_to.dialog(trade='sell collectable')
+                else:
+                    x, y = self.move_to.x, self.move_to.y
+                xx, yy = self.onWorldPos()
+                print(x, y, xx, yy)
+                if x > xx:
+                    right(self.velocity, self.rect)
+                elif x < xx:
+                    left(self.velocity, self.rect)
+                elif y < yy:
+                    up(self.velocity, self.rect)
+                elif y > yy:
+                    down(self.velocity, self.rect)
+                else:
+                    if isinstance(self.move_to, NPC):
+                        self.move_to.dialog(quest='pass')
+                    self.move_to = None
+            else:
+                if self.queue_move_to:
+                    self.move_to = self.queue_move_to.pop(0)
+                elif not choice(self.ACTIONS)(self):
+                    random_point(self)
 
     def add_velocity(self, value: tuple):
         self.velocity += value
-    
+
     def set_velocity(self, *args):
         if isinstance(args[0], tuple):
             value = args[0]
@@ -82,6 +134,9 @@ class Hero(Character):
     def onWindowPos(self):
         return self.rect.topleft
 
+    def onWorldPos(self) -> tuple:
+        return tuple(self.rect.center + self.velocity - (0, 25))
+
     def onDeath(self, *args):
         self.velocity = pygame.math.Vector2(0, 0)
         self.rect.center = (WIDTH // 2, HEIGHT // 2)
@@ -90,24 +145,116 @@ class Hero(Character):
 class NPC(Character):
     ACTIONS = (up, left, right, down)
 
-    def __init__(self, x: int, y: int, name: str, loc, structure=None):
+    def __init__(self, x: int, y: int, name: str, loc, app, structure=None):
         """Конструктор класса НПС(мирный)
 
         :param loc: Прикрепление к локации
+        :param app: class App from main.py
         :param structure: Прикрепление к структуре(необяз)
         """
         Character.__init__(self, x, y, SKINCOLOR)
         self.loc = loc
+        self.app = app
         self.name = name
         self.structure = structure
-        self.quests = []
-        self.sell_items = []
+        self.quests: List['Quest'] = []
+        self.sell_items: List['Item'] = []
         self.lasttime = datetime.now()
         self.loc.characters.append(self)
-        # TODO Диалог с героем для квестов и торговли
+        self._x, self._y = self.rect.x, self.rect.y
+        self.is_moving = True
+
+    def dialog(self, quest=None, trade=None):
+        """Получение текста диалога
+
+        :param quest: get - получить квест, pass - сдать квест
+        :param trade: buy equip - покупка снаряж, sell collectable - продажа трофеев
+        :return: текст
+        """
+        if quest and self.quests:
+            # --- Функциональная часть
+            if quest == 'get':
+                if not self.quests[0] in Hero.hero_object.quests:
+                    Hero.hero_object.quests.append(self.quests[0])
+            elif quest == 'pass':
+                if self.quests[0].pass_quest(Hero.hero_object):
+                    self.quests.pop(0)
+                else:
+                    return
+            # --- Возвращение текста
+            i = Handler.get_dialog(f'quest_{quest}')
+            params = {}
+            for param in i[3].split(','):  # Заполнение из need_params для форматирования text
+                if param.strip() == 'quest_text':
+                    params['quest_text'] = self.quests[0].text()
+            left(Hero.hero_object.velocity, Hero.hero_object.rect)
+            self.app.dialog = Dialog(Hero.hero_object, self, [i[2].format(**params)])
+        elif trade:
+            trade = trade.replace(' ', '_')
+            if 'buy' in trade and self.sell_items:
+                if 'equip' in trade:
+                    item = choice([i for i in self.sell_items if i.type == 'equipment'])
+                elif 'collectable' in trade:
+                    item = choice([i for i in self.sell_items if i.type == 'collectable'])
+                else:
+                    item = choice(self.sell_items)
+                price = item.price
+                if price > 5:
+                    price += randint(-4 - price // 5, 4 + price // 5)
+                i = Handler.get_dialog(f'trade_{trade}')
+                params = {}
+                for p in i[3].split(','):
+                    if p.strip() == 'item_name':
+                        params['item_name'] = item.name
+                    elif p.strip() == 'item_price':
+                        params['item_price'] = price
+                text = [i[2].format(**params)]
+                if hero_need_item_buy(Hero.hero_object, item):
+                    if Hero.hero_object.coins >= price:
+                        item.price = price
+                        Hero.hero_object.inventory.append([item])
+                        Hero.hero_object.coins -= price
+                        text.append('Согласен!')
+                    else:
+                        text.append('У меня нет на это денег.')
+                left(Hero.hero_object.velocity, Hero.hero_object.rect)
+                self.app.dialog = Dialog(Hero.hero_object, self, text)
+            elif 'sell' in trade:
+                if 'equip' in trade:
+                    items = [i for i in Hero.hero_object.inventory.itemsList(without_none=True)
+                             if i.type == 'equipment']
+                elif 'collectable' in trade:
+                    items = [i for i in Hero.hero_object.inventory.itemsList(without_none=True)
+                             if i.type == 'collectable']
+                else:
+                    items = Hero.hero_object.inventory.itemsList()
+                text = []
+                for item in items:
+                    price = item.price
+                    if price > 5:
+                        price += randint(-4 - price // 5, 4 + price // 5)
+                    i = Handler.get_dialog(f'trade_{trade}')
+                    params = {}
+                    for p in i[3].split(','):
+                        if p.strip() == 'item_name':
+                            params['item_name'] = item.name
+                        elif p.strip() == 'item_price':
+                            params['item_price'] = price
+                    text.append([i[2].format(**params)])
+                    if hero_need_item_sell(Hero.hero_object, item):
+                        item.price = price
+                        Hero.hero_object.coins += price
+                        Hero.hero_object.inventory.clear(item)
+                        text.append("Согласен!")
+                    else:
+                        text.append("Откажусь")
+                left(Hero.hero_object.velocity, Hero.hero_object.rect)
+                self.app.dialog = Dialog(Hero.hero_object, self, text)
 
     def update(self):
-        if (datetime.now() - self.lasttime).seconds > 0.5:
+        if not self.app.dialog:
+            self.is_moving = True
+        if (datetime.now() - self.lasttime).seconds > 3 and self.is_moving:
             self.lasttime = datetime.now()
             if self.structure:
                 choice(self.ACTIONS)(self.rect, None,
@@ -118,10 +265,13 @@ class NPC(Character):
                                      (self.loc.minx, self.loc.miny),
                                      (self.loc.maxx, self.loc.maxy))
 
-    def fullDescription(self):
+    def fullDescription(self) -> str:
         s = f'Имя: {self.name}\nТип: NPC\n{"Есть квесты" if self.quests else ""}\n'
         s += f'{"Есть предметы на продажу" if self.sell_items else ""}'
         return s
+
+    def onWorldPos(self) -> tuple:
+        return tuple(self.rect.center)
 
     def __str__(self):
         return f'{self.name}(HP: {self.health})'

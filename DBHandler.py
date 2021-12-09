@@ -20,3 +20,9 @@ class Handler:
         """
         # TODO сохранение всех параметвор локации
         pass
+
+    @staticmethod
+    def get_dialog(dialog_name):
+        a = Handler.cur.execute(f'SELECT * FROM dialog WHERE name = "{dialog_name}"').fetchall()
+        if a:
+            return a[0]
