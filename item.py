@@ -1,5 +1,6 @@
-import copy
 from typing import List, Union
+from DBHandler import Handler
+import pygame
 
 
 available_itemstats = '''
@@ -23,7 +24,7 @@ class Inventory:
         При его указания вещи сначала ложатся в связанный, а затем в основной инвентарь
         """
         self.owner = owner
-        self.slots = [Slot(None, str(i)) for i in range(slots_count)]
+        self.slots = [Slot(None, str(i + 1)) for i in range(slots_count)]
         self.linked_inv = linked_inv
         if slots_name is not None:
             for i, name in enumerate(slots_name):
@@ -31,6 +32,34 @@ class Inventory:
         if slots_items is not None:
             for i, item in enumerate(slots_items):
                 self.slots[i].item = item
+
+    def draw(self, screen):
+        font = pygame.font.Font(pygame.font.match_font('arial'), 18)
+        inv_surf = pygame.image.load('sprites/a.png')
+        inv_surf.set_alpha(180)
+        screen.blit(inv_surf, inv_surf.get_rect(topleft=(375, 0)))
+        x, y = (375 + 34, 85)
+        bias = 92
+        i = 1
+        for item in self.itemsList():
+            if item is None:
+                continue
+            if len(str(item)) > 7:
+                screen.blit(font.render(str(item)[:8], True, (10, 10, 10)), (x, y))
+                screen.blit(font.render(str(item)[8:], True, (10, 10, 10)), (x, y + 22))
+            else:
+                screen.blit(font.render(str(item), True, (10, 10, 10)), (x, y))
+            if i % 3 == 0:
+                y += bias
+                x = 375 + 34
+            else:
+                x += bias
+            i += 1
+            # 34, 85
+            # 109, 85
+            # 126, 85
+            # 201, 85
+            # 34, 177
 
     def getSlotItem(self, slot_name):
         slot_name = str(slot_name)
@@ -51,7 +80,8 @@ class Inventory:
         except IndexError:
             pass
 
-    def append(self, other_inv: Union['Inventory', list]):
+    def append(self, other_inv: Union['Inventory', list],
+               use_linked_inv=True):
         """Добавление предметов из другого инвенторя"""
         if isinstance(other_inv, Inventory):
             items = other_inv.itemsList(without_none=True)
@@ -59,13 +89,22 @@ class Inventory:
             items = other_inv
         if len([i for i in self.slots if i.item is None]) < len(items):
             self.clear(trash=True)
-        if self.linked_inv:
+        if self.linked_inv and use_linked_inv:
             for s in self.linked_inv.slots:
                 if s.item is None:
                     for i in items:
                         if i.for_slot is not None and i.for_slot == s.name:
                             s.item = items.pop(items.index(i)).copy()
                             break
+                    if len(items) == 0:
+                        return
+                else:
+                    for i in items:
+                        if i.for_slot is not None and i.for_slot == s.name:
+                            if Item.better_item(i, s.item):
+                                self.append([s.item], use_linked_inv=False)
+                                s.item = items.pop(items.index(i)).copy()
+                                break
                     if len(items) == 0:
                         return
         for s in self.slots:
@@ -161,6 +200,27 @@ class Item:
 
     def copy(self):
         return Item(self.name, self.type, self.for_slot, **self.stats)
+
+    @staticmethod
+    def better_item(item1, item2) -> bool:
+        """Проверка что item1 лучше item2"""
+        if item1 == item2:
+            return False
+        elif item2 is None:
+            return True
+        if item1.type == 'equipment':
+            if item2.for_slot == item1.for_slot:
+                if item1.damage > item2.damage or item1.armor > item2.armor:
+                    return True
+        elif item1.type == 'collectable':
+            if item1.price > item2.price:
+                return True
+        return False
+
+    @staticmethod
+    def getItem(item_name):
+        a = Handler.get_items(item_name=item_name)
+        return a[0] if a else None
 
     def __getattr__(self, item):
         if item in self.__dict__:

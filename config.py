@@ -1,9 +1,10 @@
 # --- Константы
 import datetime
 import random
-from typing import List
+from typing import List, Union
 
 from item import Item
+from DBHandler import Handler
 
 WIDTH = 800
 HEIGHT = 650
@@ -13,10 +14,11 @@ FPS = 15
 
 # --- Цвета
 WHITE = (255, 255, 255)
-FONT_TEXT = (68, 68, 68)
+FONT_TEXT = (10, 10, 10)
 GRAY = (128, 128, 128)
 LIGHT_GRAY = (160, 160, 164)
 DARK_GRAY = (41, 59, 51)
+STONE = (173, 165, 135)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 DARK_RED = (150, 0, 24)
@@ -24,141 +26,27 @@ GREEN = (0, 255, 0)
 DARK_GREEN = (0, 71, 49)
 FOREST_GREEN = (11, 102, 35)
 BLUE = (0, 0, 255)
-BROWN = (139, 69, 19)
+BROWN = (115, 66, 23)
 SAND = (252, 221, 118)
 LIGHT_SAND = (255, 236, 139)
 DARK_SAND = (214, 165, 4)
 SKINCOLOR = (245, 245, 220)
 
-# --- Данные
-locations_list: dict = {
-    'болото': {
-        'minx': -WIDTH,
-        'miny': -HEIGHT,
-        'maxx': WIDTH * 10,
-        'maxy': HEIGHT * 10,
-        'basic_blocks_color': (DARK_GREEN, FOREST_GREEN)
-    },
-    'горы': {
-        'minx': WIDTH * 10,
-        'miny': -HEIGHT,
-        'maxx': WIDTH * 20,
-        'maxy': HEIGHT * 10,
-        'basic_blocks_color': (GRAY, LIGHT_GRAY, DARK_GRAY)
-    },
-    'пустыня': {
-        'minx': -WIDTH,
-        'miny': HEIGHT * 10,
-        'maxx': WIDTH * 20,
-        'maxy': HEIGHT * 20,
-        'basic_blocks_color': (SAND, LIGHT_SAND, DARK_SAND)
-    }
-}
-# MAP VIEW
-# ББББГГГГ
-# ББББГГГГ
-# ББББГГГГ
-# ПППППППП
-# ПППППППП
-# ПППППППП
-
-structures_list = {
-    'House': {
-        'location_name': 'loc1',
-        'color': (RED,),
-        'x': WIDTH // 2,
-        'y': HEIGHT // 2 - 25
-    },
-    'House2': {
-        'location_name': 'loc1',
-        'color': (RED,),
-        'x': 1000,
-        'y': 1000
-    },
-    'House3': {
-        'location_name': 'loc1',
-        'color': (RED,),
-        'x': 1200,
-        'y': 1000
-    },
-    'House4': {
-        'location_name': 'loc1',
-        'color': (RED,),
-        'x': 1400,
-        'y': 1000
-    },
-    'House5': {
-        'location_name': 'loc1',
-        'color': (RED,),
-        'x': 1600,
-        'y': 1000
-    },
-    'House21': {
-        'location_name': 'loc1',
-        'color': (RED,),
-        'x': 1000,
-        'y': 1100
-    },
-    'House31': {
-        'location_name': 'loc1',
-        'color': (RED,),
-        'x': 1200,
-        'y': 1100
-    },
-    'House41': {
-        'location_name': 'loc1',
-        'color': (RED,),
-        'x': 1400,
-        'y': 1100
-    },
-    'House51': {
-        'location_name': 'loc1',
-        'color': (RED,),
-        'x': 1600,
-        'y': 1100
-    },
-    'House6': {
-        'location_name': 'болото',
-        'color': (RED,),
-        'x': 3000,
-        'y': 800
-    }
-}
-structure_items_list = [
-    (10, Item('золото', price=10)),
-    (1, Item('стеклянный меч', 'equipment', 'hands', damage=15, drop_chance=0.1, price=50)),
-    (5, Item('кости', price=1)),
-    (5, Item('кирпич пыли')),
-    (3, Item('Топорик', 'equipment', 'hands', damage=5, drop_chance=0.9, price=10))
-]  # Вид (weight(для random.choices), Item)
-equipment_items_list = [
-    Item('Кожаная куртка', 'equipment', 'body', armor=2, drop_chance=0.8, price=5),
-    Item('Ботинки', 'equipment', 'boots', armor=1, drop_chance=0.8, price=2),
-    Item('Штаны', 'equipment', 'legs', armor=1, drop_chance=0.8, price=3),
-    Item('Бита', 'equipment', 'hands', damage=4, drop_chance=0.7, price=2)
-]
-epic_items_list = [
-    Item('Ban hammer', 'equipment', 'hands', damage=100)
-]
-drop_items_list = [
-    Item('кости', price=1)
-]
-
 
 # --- Вспомогательные классы
 class Quest:
-    def __init__(self, name, target: 'Target', owner, reward: List['Item']):
+    def __init__(self, name, target: Union['Target', tuple], reward: List['Item'],
+                 owner=None):
         """Конструктор Квеста
 
         :param name: Название
         :param target: Цель для завершения квеста
-        :param owner: Тот, кто выдал квест
         :param reward: Вознаграждение за выполнение
         """
         self.name = name
-        self.target = target
-        self.owner = owner
+        self.target = Target(*target) if isinstance(target, tuple) else target
         self.reward = reward
+        self.owner = None
 
     def pass_quest(self, hero):
         if self.target.check_done(hero):
@@ -177,18 +65,21 @@ class Quest:
     def text(self):
         return str(self.target)
 
+    def copy(self):
+        return Quest(self.name, self.target.copy(), self.reward, self.owner)
+
 
 class Target:
     def __init__(self, typ: str, obj, count: int):
         """Конструктор Цели для квеста
 
         :param typ: Тип цели(collect, kill)
-        :param obj: Обьект для достижения цели (Item, Enemy)
+        :param obj: Обьект для достижения цели (Item, enemy_name)
         :param count: Кол-во обьектов для достижения цели
         """
         self.typ = typ
         self.obj = obj
-        self.count = count
+        self.count = int(count)
 
     def check_done(self, hero):
         """Проверка на выполнение квеста"""
@@ -196,9 +87,12 @@ class Target:
             if hero.inventory.itemsList().count(self.obj) >= self.count:
                 return True
         elif self.typ == 'kill':
-            if hero.kills_counter.get(self.obj.name, 0) >= self.count:
+            if hero.kills_counter.get(self.obj, 0) >= self.count:
                 return True
         return False
+
+    def copy(self):
+        return Target(self.typ, self.obj, self.count)
 
     def __str__(self):
         s = ''
@@ -233,7 +127,7 @@ class Fight:
             self.attacker.health -= max([0, t_stats['damage'] - a_stats['armor']])
 
         return max([0, a_stats['damage'] - t_stats['armor']]) if self.attacker_turn else \
-                   max([0, t_stats['damage'] - a_stats['armor']])
+            max([0, t_stats['damage'] - a_stats['armor']])
 
     def _end(self):
         winner = self.attacker if self.target.health <= 0 else self.target if self.attacker.health <= 0 else None
@@ -242,7 +136,7 @@ class Fight:
             items = []
             for item in loser.inventory.itemsList(without_none=True) + loser.equipment.itemsList(without_none=True):
                 if item.drop_chance in list(map(lambda i: i / 100.0,
-                                                 range(int(round(random.random(), 2) * 100), 100))):
+                                                range(int(round(random.random(), 2) * 100), 100))):
                     items.append(item)
             winner.inventory.append(items)
             winner.curr_fight = None
@@ -257,9 +151,11 @@ class Fight:
         if self.attacker.health < 1:
             self._end()
             self.attacker.onDeath(self.target)
+            self.attacker.onDeath(None)
         elif self.target.health < 1:
             self._end()
             self.target.onDeath(self.attacker)
+            self.target.onDeath(None)
         self.attacker_turn = not self.attacker_turn
         if self.attacker_turn:
             x, y = self.attacker.onWindowPos()
@@ -295,3 +191,153 @@ class Dialog:
             self.character_say = not self.character_say
             y -= BLOCK_SIZE // 2 * len(t)
             return x, y, t
+
+
+# --- Данные
+locations_list: dict = {
+    'болото': {
+        'minx': -WIDTH,
+        'miny': -HEIGHT,
+        'maxx': WIDTH * 10,
+        'maxy': HEIGHT * 10,
+        'basic_blocks_color': (DARK_GREEN, FOREST_GREEN),
+        'structures': {
+            'House': 20
+        },
+        'cities': [
+            'Middletown'
+        ]
+    },
+    'горы': {
+        'minx': WIDTH * 10,
+        'miny': -HEIGHT,
+        'maxx': WIDTH * 20,
+        'maxy': HEIGHT * 10,
+        'basic_blocks_color': (GRAY, LIGHT_GRAY, DARK_GRAY),
+        'structures': {
+            'Holy ruins': 10
+        },
+        'cities': ['Hightown']
+    },
+    'пустыня': {
+        'minx': -WIDTH,
+        'miny': HEIGHT * 10,
+        'maxx': WIDTH * 20,
+        'maxy': HEIGHT * 20,
+        'basic_blocks_color': (SAND, LIGHT_SAND, DARK_SAND),
+        'structures': {
+            'Ruins': 30
+        },
+        'cities': ["Первый поселок", "Вторчинск", "Третьяковка"]
+    }
+}
+# MAP VIEW
+# ББББГГГГ
+# ББББГГГГ
+# ББББГГГГ
+# ПППППППП
+# ПППППППП
+# ПППППППП
+
+structures_list = {
+    'House': {
+        'location_name': 'болото',
+        'color': (RED,),
+        'npcs': 1
+    },
+    'Holy ruins': {
+        'location_name': 'горы',
+        'color': (STONE,)
+    },
+    'Ruins': {
+        'location_name': 'пустыня',
+        'color': (RED,)
+    },
+    'Sand house': {
+        'location_name': 'пустыня',
+        'color': (RED,),
+        'npcs': 1
+    }
+}
+structure_items_list = {
+    'House': [
+        (3, Item.getItem('золото')),
+        (1, Item.getItem('стеклянный меч')),
+        (5, Item.getItem('кости')),
+        (5, Item.getItem('кирпич пыли')),
+        (3, Item.getItem('Топорик'))
+    ],
+    'Holy ruins': [
+        (1, Item.getItem('Белое золото')),
+        (3, Item.getItem('Церковная ткань')),
+        (5, Item.getItem('Камень')),
+        (4, Item.getItem('кости'))
+    ],
+    'Ruins': [
+        (1, Item.getItem('золото')),
+        (4, Item.getItem('Красивый камень')),
+        (3, Item.getItem('Металлолом')),
+        (4, Item.getItem('кости'))
+    ],
+    'Sand house': []
+}  # Вид (weight(для random.choices), Item)
+
+npcs_list = {
+    'trader': {
+        'loc_name': 'болото',
+        'sell_items': [
+            Item.getItem('Кожаная куртка'),
+            Item.getItem('Булава'),
+            Item.getItem('Топорик'),
+            Item.getItem('Ботинки')
+        ]
+    },
+    'Странствующий торговец': {
+        'loc_name': 'пустыня',
+        'sell_items': [
+            Item.getItem('Ткань'),
+            Item.getItem('Стеклянный меч'),
+            Item.getItem('Штаны'),
+            Item.getItem('Ботинки')
+        ]
+    },
+    'quester': {
+        'loc_name': 'болото',
+        'quests': [
+            Quest(*Handler.get_quest('А', init=False)),
+            Quest(*Handler.get_quest('Б', init=False))
+        ]
+    }
+}
+enemy_list = {
+    'Монстр': {
+        'loc_name': 'болото',
+        'inventory': [
+            'шняга'
+        ],
+        'equipment': [
+            'Кулак',
+            'Рваная футболка'
+        ]
+    },
+    'Защитник гор': {
+        'loc_name': 'горы',
+        'inventory': [
+            'шняга'
+        ],
+        'equipment': [
+            'Доспехи(штаны)',
+            'Доспехи(тело)',
+            'Булава'
+        ]
+    },
+    'Обезумевший': {
+        'loc_name': 'пустыня',
+        'inventory': [
+            'шняга'
+        ],
+        'equipment': [
+            'Ткань'
+        ]
+    }
+}

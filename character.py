@@ -18,6 +18,7 @@ class Character(pygame.sprite.Sprite):
         self.rect.center = (x, y)
         self.health = 100
         self.inventory = Inventory(self, 3)  # У каждого персонажа есть инвентарь
+        self.type = 'character'
 
     def onDeath(self, *args, **kwargs):
         pass
@@ -30,14 +31,21 @@ class Character(pygame.sprite.Sprite):
     def onWindowPos(self):
         return self.rect.topleft - Hero.hero_object.velocity + (0, 25)
 
+    def onWorldPos(self) -> tuple:
+        return tuple(self.rect.center)
+
     def __str__(self):
         return f'{self.health}'
 
 
 class Hero(Character):
-    ACTIONS = (complete_quest,)  # кортеж действий, хранящий функции(из config)
-    SUBACTIONS = (hero_sell_items,)
+    ACTIONS = ((1, complete_quest), (2, loot_nearest_structure),
+               (1, hero_buy_equipment))  # кортеж действий, хранящий функции(из config)
+    # TODO Продать вещи
+    SUBACTIONS = (hero_sell_items, to_nearest_enemy)
     hero_object: 'Hero' = None
+    app = None
+    update_boost = 0
 
     def __init__(self):
         """Конструктор класса Герой
@@ -50,15 +58,17 @@ class Hero(Character):
         self.velocity = pygame.math.Vector2(0, 0)
         self.lasttime = datetime.now()
         self.is_moving = True
+        self.in_city = False
         self.equipment = Inventory(self, 5, ('head', 'body', 'legs',
                                              'boots', 'hands'))
-        self.inventory = Inventory(self, 10, linked_inv=self.equipment)
+        self.inventory = Inventory(self, 9, linked_inv=self.equipment)
         self.coins = 5
         self._curr_loc = None
 
         self.kills_counter = {}
         self.curr_fight = None
         Hero.hero_object = self
+        self.death_count = 0
 
         self.quests: List['Quest'] = []
         self.move_to = None
@@ -66,9 +76,14 @@ class Hero(Character):
         self.task = ''
 
     def update(self):
-        if (datetime.now() - self.lasttime).seconds > 0.5 and self.is_moving and self.curr_fight is None:
+        if (datetime.now() - self.lasttime).seconds > 1 - 0.8 * Hero.update_boost \
+                and self.is_moving and self.curr_fight is None:
             # Совершение случайного действия раз в 3 секунды
             self.lasttime = datetime.now()
+            if self.in_city:
+                if self.health < 100:
+                    self.health += randint(5, 20)
+                    return
             if self.move_to:
                 # TODO Следование по заданному алгоритмом пути
                 if isinstance(self.move_to, NPC):  # Проверка на нахождение рядом с целью(НПС)
@@ -79,20 +94,32 @@ class Hero(Character):
                                   int(self.rect.centerx + self.velocity.x + 100)) \
                             and y in range(int(self.rect.centery + self.velocity.y - 100),
                                            int(self.rect.centery + self.velocity.y + 100)):
+                        print(self.task)
                         if self.task.lower() == 'pass quest':
                             if self.quests[0].target.check_done(self):
                                 self.move_to.dialog(quest='pass')
                                 self.move_to = None
+                                print("PASS")
                         elif self.task.lower() == 'get quest':
-                            if len(self.move_to.quests) > 0:
+                            if self.move_to.quests:
                                 self.move_to.dialog(quest='get')
                                 self.task = ''
                                 self.move_to = None
                         elif self.task.lower() == 'trade sell':
                             self.task = ''
                             self.move_to.dialog(trade='sell collectable')
+                            self.move_to = None
+                        elif self.task.lower() == 'trade buy':
+                            if self.move_to.sell_items:
+                                self.task = ''
+                                self.move_to.dialog(trade='buy equip')
+                                self.move_to = None
+                elif isinstance(self.move_to, Enemy):
+                    x, y = self.onWorldPos()
                 else:
                     x, y = self.move_to.x, self.move_to.y
+                    if self.task == 'moving' and self.quests:
+                        complete_quest(self)
                 xx, yy = self.onWorldPos()
                 print(x, y, xx, yy)
                 if x > xx:
@@ -104,14 +131,18 @@ class Hero(Character):
                 elif y > yy:
                     down(self.velocity, self.rect)
                 else:
-                    if isinstance(self.move_to, NPC):
+                    if isinstance(self.move_to, NPC) and self.task == 'pass quest':
                         self.move_to.dialog(quest='pass')
                     self.move_to = None
             else:
                 if self.queue_move_to:
                     self.move_to = self.queue_move_to.pop(0)
-                elif not choice(self.ACTIONS)(self):
-                    random_point(self)
+                else:
+                    if self.health in range(1, 25):
+                        to_nearest_city(self)
+                    elif not choices([a for _, a in self.ACTIONS],
+                                     weights=[w for w, _ in self.ACTIONS])[0](self):
+                        random_point(self)
 
     def add_velocity(self, value: tuple):
         self.velocity += value
@@ -140,6 +171,7 @@ class Hero(Character):
     def onDeath(self, *args):
         self.velocity = pygame.math.Vector2(0, 0)
         self.rect.center = (WIDTH // 2, HEIGHT // 2)
+        self.death_count += 1
 
 
 class NPC(Character):
@@ -163,6 +195,7 @@ class NPC(Character):
         self.loc.characters.append(self)
         self._x, self._y = self.rect.x, self.rect.y
         self.is_moving = True
+        self.type = 'npc'
 
     def dialog(self, quest=None, trade=None):
         """Получение текста диалога
@@ -217,6 +250,19 @@ class NPC(Character):
                         text.append('Согласен!')
                     else:
                         text.append('У меня нет на это денег.')
+                else:
+                    text.append('Не')
+                    item = choice([i for i in self.sell_items if i.type == 'equipment'])
+                    if hero_need_item_buy(Hero.hero_object, item):
+                        if Hero.hero_object.coins >= price:
+                            item.price = price
+                            Hero.hero_object.inventory.append([item])
+                            Hero.hero_object.coins -= price
+                            text.append('Согласен!')
+                        else:
+                            text.append('У меня нет на это денег.')
+                    else:
+                        text.append('Не')
                 left(Hero.hero_object.velocity, Hero.hero_object.rect)
                 self.app.dialog = Dialog(Hero.hero_object, self, text)
             elif 'sell' in trade:
@@ -254,7 +300,7 @@ class NPC(Character):
     def update(self):
         if not self.app.dialog:
             self.is_moving = True
-        if (datetime.now() - self.lasttime).seconds > 3 and self.is_moving:
+        if (datetime.now() - self.lasttime).seconds > 3 - 2.8 * Hero.update_boost and self.is_moving:
             self.lasttime = datetime.now()
             if self.structure:
                 choice(self.ACTIONS)(self.rect, None,
@@ -270,15 +316,12 @@ class NPC(Character):
         s += f'{"Есть предметы на продажу" if self.sell_items else ""}'
         return s
 
-    def onWorldPos(self) -> tuple:
-        return tuple(self.rect.center)
-
     def __str__(self):
         return f'{self.name}(HP: {self.health})'
 
 
 class Enemy(Character):
-    ACTIONS = (up, left, right, down)
+    ACTIONS = (move_to_point,)
 
     def __init__(self, x: int, y: int, name: str, loc, structure=None):
         """Конструктор класса Враг
@@ -294,7 +337,9 @@ class Enemy(Character):
         self.inventory = Inventory(self, 3, linked_inv=self.equipment)
         self.lasttime = datetime.now()
         self.loc.characters.append(self)
+        self.type = 'enemy'
 
+        self.move_to = Hero.hero_object
         self.curr_fight = None
 
     def onDeath(self, killer):
@@ -304,19 +349,16 @@ class Enemy(Character):
             self.loc.characters.remove(self)
         except ValueError:
             pass
+        Hero.app.all_sprites.remove(self)
         del self
 
     def update(self):
-        if (datetime.now() - self.lasttime).seconds > 3 and self.curr_fight is None:
+        if (datetime.now() - self.lasttime).seconds > 0.2 - 0.15 * Hero.update_boost \
+                and self.curr_fight is None:
             self.lasttime = datetime.now()
-            if self.structure:
-                choice(self.ACTIONS)(self.rect, None,
-                                     (self.structure.x - BLOCK_SIZE * 4, self.structure.y - BLOCK_SIZE * 4),
-                                     (self.structure.x + BLOCK_SIZE * 4, self.structure.y + BLOCK_SIZE * 4))
-            else:
-                choice(self.ACTIONS)(self.rect, None,
-                                     (self.loc.minx, self.loc.miny),
-                                     (self.loc.maxx, self.loc.maxy))
+            choice(self.ACTIONS)(self.rect, self.move_to.onWorldPos(),
+                                 minc=(self.loc.minx, self.loc.miny),
+                                 maxc=(self.loc.maxx, self.loc.maxy))
             # --- Проверка на коллизию с героем
             if self.rect.collidepoint(Hero.hero_object.velocity.x + WIDTH // 2,
                                       Hero.hero_object.velocity.y + (HEIGHT // 2 - 25)):
@@ -325,6 +367,11 @@ class Enemy(Character):
                     Hero.hero_object.curr_fight = Fight(self, Hero.hero_object)
                     self.curr_fight = Hero.hero_object.curr_fight
                     right(Hero.hero_object.velocity, Hero.hero_object.rect)
+            if self.onWorldPos()[0] < Hero.hero_object.onWorldPos()[0] - BLOCK_SIZE * 20 \
+                    or self.onWorldPos()[0] > Hero.hero_object.onWorldPos()[0] + BLOCK_SIZE * 20 \
+                    or self.onWorldPos()[1] < Hero.hero_object.onWorldPos()[1] - BLOCK_SIZE * 20 \
+                    or self.onWorldPos()[1] > Hero.hero_object.onWorldPos()[1] + BLOCK_SIZE * 20:
+                self.onDeath(None)
 
     def getFightStats(self):
         stats = {}
