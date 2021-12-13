@@ -15,7 +15,7 @@ class Location:
     locations_objects: List['Location'] = []
 
     def __init__(self, name, minx=0, miny=0, maxx=0, maxy=0,
-                 basic_blocks_color=(DARK_GREEN, FOREST_GREEN),
+                 basic_blocks_spritename=(DARK_GREEN, FOREST_GREEN),
                  structures=None, cities=None, app=None):
         if Handler.get_locations_params(name) is not None:  # Если такая локация существует...
             for param_name, val in Handler.get_locations_params(name):
@@ -36,7 +36,7 @@ class Location:
                 for name, count in structures.items():
                     for _ in range(count):
                         x, y = randrange(sminx, maxx, 50), randrange(sminy, maxy, 50)
-                        self.structures_list.append(Structure(x, y, name, structures_list[name]['color'],
+                        self.structures_list.append(Structure(x, y, name, name,
                                                               structure_items_list.get(name, None)))
                         if structures_list[name].get('npcs') is not None:
                             for _ in range(structures_list[name]['npcs']):
@@ -59,7 +59,7 @@ class Location:
                         self.blocks_sprites.add(s)
                         continue
                     else:
-                        self.blocks_sprites.add(Block(x, y, image_name=basic_blocks_color))
+                        self.blocks_sprites.add(Block(x, y, image_name=basic_blocks_spritename))
             Handler.save_locations_params(**self.__dict__)
         Location.locations_objects.append(self)
 
@@ -140,6 +140,8 @@ class Location:
 class Block(pygame.sprite.Sprite):
     images = {
         'house': [(3, pygame.image.load('sprites/structure1.png').convert())],
+        'holy ruins': [(3, pygame.image.load('sprites/structure1.png').convert())],
+        'ruins': [(3, pygame.image.load('sprites/sand_structure.png').convert())],
         'grass': [
             (3, pygame.image.load('sprites/grass1.png').convert()),
             (3, pygame.image.load('sprites/grass2.png').convert()),
@@ -187,9 +189,9 @@ class Block(pygame.sprite.Sprite):
 
 
 class Structure(Block):
-    def __init__(self, x, y, name, colors=(BLUE, RED),
-                 items_list=None):
-        super().__init__(x, y, colors=colors, image_name='house')
+    def __init__(self, x: int, y: int, name: str, image_name: str,
+                 items_list: list = None):
+        super().__init__(x, y, image_name=image_name.lower())
         self.image.set_colorkey((255, 255, 255))
         self.x, self.y = x, y
         self.name = name

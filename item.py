@@ -38,8 +38,8 @@ class Inventory:
         inv_surf = pygame.image.load('sprites/inventory.png')
         inv_surf.set_alpha(180)
         screen.blit(inv_surf, inv_surf.get_rect(topleft=(375, 0)))
-        x, y = (375 + 34, 85)
-        bias = 92
+        x, y = (375 + 34, 85)  # координаты 1 слота
+        bias = 92  # смещение на следующий слот(пикселей)
         i = 1
         for item in self.itemsList():
             if item is None:
@@ -55,11 +55,6 @@ class Inventory:
             else:
                 x += bias
             i += 1
-            # 34, 85
-            # 109, 85
-            # 126, 85
-            # 201, 85
-            # 34, 177
 
     def getSlotItem(self, slot_name):
         slot_name = str(slot_name)
