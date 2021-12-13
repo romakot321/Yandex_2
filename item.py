@@ -35,7 +35,7 @@ class Inventory:
 
     def draw(self, screen):
         font = pygame.font.Font(pygame.font.match_font('arial'), 18)
-        inv_surf = pygame.image.load('sprites/a.png')
+        inv_surf = pygame.image.load('sprites/inventory.png')
         inv_surf.set_alpha(180)
         screen.blit(inv_surf, inv_surf.get_rect(topleft=(375, 0)))
         x, y = (375 + 34, 85)

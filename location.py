@@ -1,10 +1,14 @@
 from DBHandler import Handler
 import pygame
 from config import *
-from random import randint, choices, random, randrange
+from random import choices, random, randrange, choice, randint
 from typing import List
-from character import Character, Hero, Enemy, NPC
+from character import Hero, Enemy, NPC
 from item import Inventory, Item
+
+# Для pygame.image.convert (ускорение прорисовки спрайтов)
+pygame.display.init()
+pygame.display.set_mode((WIDTH, HEIGHT))
 
 
 class Location:
@@ -20,7 +24,7 @@ class Location:
             self.maxx, self.maxy = maxx, maxy
             self.minx, self.miny = minx, miny
             self.name = name
-            self.characters: List['Character'] = []
+            self.characters: List[Union['Hero', 'Enemy', 'NPC']] = []
             self.structures_list = []
             self.blocks_sprites = pygame.sprite.Group()
             sminx, sminy = minx, miny
@@ -55,7 +59,7 @@ class Location:
                         self.blocks_sprites.add(s)
                         continue
                     else:
-                        self.blocks_sprites.add(Block(x, y, colors=basic_blocks_color))
+                        self.blocks_sprites.add(Block(x, y, image_name=basic_blocks_color))
             Handler.save_locations_params(**self.__dict__)
         Location.locations_objects.append(self)
 
@@ -134,18 +138,59 @@ class Location:
 
 
 class Block(pygame.sprite.Sprite):
-    def __init__(self, x, y, colors=()):
+    images = {
+        'house': [(3, pygame.image.load('sprites/structure1.png').convert())],
+        'grass': [
+            (3, pygame.image.load('sprites/grass1.png').convert()),
+            (3, pygame.image.load('sprites/grass2.png').convert()),
+            (3, pygame.image.load('sprites/grass3.png').convert()),
+            (2, pygame.image.load('sprites/grass_blue.png').convert()),
+            (2, pygame.image.load('sprites/grass_yellow.png').convert()),
+            (0.1, pygame.image.load('sprites/grass_rock.png').convert())
+        ],
+        'mountain': [
+            (3, pygame.image.load('sprites/mountain1.png').convert()),
+            (3, pygame.image.load('sprites/mountain2.png').convert()),
+            (3, pygame.image.load('sprites/mountain3.png').convert()),
+            (0.1, pygame.image.load('sprites/mountain_rock1.png').convert()),
+            (0.1, pygame.image.load('sprites/mountain_rock2.png').convert())
+        ],
+        'sand': [
+            (1, pygame.image.load('sprites/sand1.png').convert()),
+            (3, pygame.image.load('sprites/sand2.png').convert()),
+            (3, pygame.image.load('sprites/sand3.png').convert()),
+            (0.07, pygame.image.load('sprites/sand_cactus1.png').convert()),
+            (0.06, pygame.image.load('sprites/sand_cactus2.png').convert())
+        ]
+    }
+    basic_image = pygame.Surface((BLOCK_SIZE, BLOCK_SIZE))
+    basic_image.fill(RED)
+
+    def __init__(self, x, y, colors=(), image_name=None):
         pygame.sprite.Sprite.__init__(self)
-        self.image = pygame.Surface((BLOCK_SIZE, BLOCK_SIZE))
-        self.image.fill(colors[randint(0, len(colors) - 1)])
+        self._image_name = image_name
+        self.im_index = choices(range(0, len(Block.images[image_name])),
+                                weights=[w for w, _ in Block.images[image_name]])[0] \
+            if image_name else None
         self.rect = self.image.get_rect()
         self.rect.center = (x, y)
+
+    @property
+    def image(self):
+        return self._image_name
+
+    @image.getter
+    def image(self):
+        if self._image_name is None:
+            return Block.basic_image
+        return Block.images[self._image_name][self.im_index][1]
 
 
 class Structure(Block):
     def __init__(self, x, y, name, colors=(BLUE, RED),
                  items_list=None):
-        super().__init__(x, y, colors=colors)
+        super().__init__(x, y, colors=colors, image_name='house')
+        self.image.set_colorkey((255, 255, 255))
         self.x, self.y = x, y
         self.name = name
         if items_list:

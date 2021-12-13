@@ -142,6 +142,7 @@ class App:
         curr_loc = Location.get_location(self.hero.velocity.x, self.hero.velocity.y)
         self.screen.fill(BLACK)
 
+        # --- Render sprites
         for sprite in Location.getSpritesToDraw(self.hero.velocity):
             self.screen.blit(sprite.image, sprite.rect.topleft - self.hero.velocity + (0, 25))
             # Эффект передвижение камеры реализуется за счет вычитания вектора из координат спрайта

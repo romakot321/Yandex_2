@@ -200,7 +200,7 @@ locations_list: dict = {
         'miny': -HEIGHT,
         'maxx': WIDTH * 10,
         'maxy': HEIGHT * 10,
-        'basic_blocks_color': (DARK_GREEN, FOREST_GREEN),
+        'basic_blocks_color': 'grass',
         'structures': {
             'House': 20
         },
@@ -213,7 +213,7 @@ locations_list: dict = {
         'miny': -HEIGHT,
         'maxx': WIDTH * 20,
         'maxy': HEIGHT * 10,
-        'basic_blocks_color': (GRAY, LIGHT_GRAY, DARK_GRAY),
+        'basic_blocks_color': 'mountain',
         'structures': {
             'Holy ruins': 10
         },
@@ -224,7 +224,7 @@ locations_list: dict = {
         'miny': HEIGHT * 10,
         'maxx': WIDTH * 20,
         'maxy': HEIGHT * 20,
-        'basic_blocks_color': (SAND, LIGHT_SAND, DARK_SAND),
+        'basic_blocks_color': 'sand',
         'structures': {
             'Ruins': 30
         },
