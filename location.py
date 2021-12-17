@@ -41,12 +41,13 @@ class Location:
                         if structures_list[name].get('npcs') is not None:
                             for _ in range(structures_list[name]['npcs']):
                                 npc = [i for i in npcs_list.keys() if npcs_list[i]['loc_name'] == self.name]
-                                npc = choices(npc)[0]
-                                self.characters.append(NPC(x, y, npc, self, app, self.structures_list[-1]))
+                                npc = choice(npc)
+                                self.characters.append(NPC(x, y, npc, self, app, self.structures_list[-1],
+                                                           npcs_list[npc].get('image_name', None)))
                                 self.characters[-1].sell_items = npcs_list[npc].get('sell_items', [])
-                                self.characters[-1].quests = npcs_list[npc].get('quests', [])
-                                for i in range(len(self.characters[-1].quests)):
-                                    self.characters[-1].quests[i] = self.characters[-1].quests[i].copy()
+                                self.characters[-1].quests = npcs_list[npc].get('quests', []).copy()
+                                for i, n in enumerate(self.characters[-1].quests):
+                                    self.characters[-1].quests[i] = Handler.get_quest(n)
                                     self.characters[-1].quests[i].owner = self.characters[-1]
             if cities:
                 for name in cities:
@@ -124,13 +125,14 @@ class Location:
 
     def spawnEnemy(self):
         """Спавн противника с некоторым шансом"""
-        if 0.102 < round(random(), 3) < 0.200:
+        if 0.102 < round(random(), 3) < 0.16:
             en = choices([i for i in enemy_list.keys() if enemy_list[i]['loc_name'] == self.name])[0]
             x, y = Hero.hero_object.onWorldPos()
             enemy = Enemy(randrange(x - BLOCK_SIZE * 10, x + BLOCK_SIZE * 10, BLOCK_SIZE),
                           randrange(y - BLOCK_SIZE * 10, y + BLOCK_SIZE * 10, BLOCK_SIZE),
-                          en, Location.get_location(name=enemy_list[en]['loc_name']))
-            enemy.inventory.append([Item.getItem(i) for i in enemy_list[en].get('equipment', [])])
+                          en, Location.get_location(name=enemy_list[en]['loc_name']),
+                          image_name=enemy_list[en].get('image_name', None))
+            enemy.equipment.append([Item.getItem(i) for i in enemy_list[en].get('equipment', [])])
             enemy.inventory.append([Item.getItem(i) for i in enemy_list[en].get('inventory', [])])
             self.characters.append(enemy)
             return enemy
@@ -171,9 +173,13 @@ class Block(pygame.sprite.Sprite):
     def __init__(self, x, y, colors=(), image_name=None):
         pygame.sprite.Sprite.__init__(self)
         self._image_name = image_name
-        self.im_index = choices(range(0, len(Block.images[image_name])),
-                                weights=[w for w, _ in Block.images[image_name]])[0] \
-            if image_name else None
+        try:
+            self.im_index = choices(range(0, len(Block.images[image_name])),
+                                    weights=[w for w, _ in Block.images[image_name]])[0] \
+                if image_name else None
+        except KeyError:
+            self._image_name = None
+            self.im_index = None
         self.rect = self.image.get_rect()
         self.rect.center = (x, y)
 
@@ -199,6 +205,8 @@ class Structure(Block):
             weights = [w for w, _ in items_list]
             items = [i for _, i in items_list]
             self.inventory = Inventory(self, 3, slots_items=choices(items, weights=weights, k=3))
+        else:
+            self.inventory = Inventory(self, 3)
 
 
 class City(Block):

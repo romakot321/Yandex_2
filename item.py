@@ -36,7 +36,7 @@ class Inventory:
     def draw(self, screen):
         font = pygame.font.Font(pygame.font.match_font('arial'), 18)
         inv_surf = pygame.image.load('sprites/inventory.png')
-        inv_surf.set_alpha(180)
+        inv_surf.set_alpha(200)
         screen.blit(inv_surf, inv_surf.get_rect(topleft=(375, 0)))
         x, y = (375 + 34, 85)  # координаты 1 слота
         bias = 92  # смещение на следующий слот(пикселей)
@@ -117,7 +117,7 @@ class Inventory:
         trash=True - Мусор"""
         if trash:
             q_items = []  # Quest items
-            if 'move_to' in self.owner.__dict__:
+            if self.owner.name == 'Герой':
                 q_items = [q.target.obj for q in self.owner.quests if q.target.typ == 'collect']
             t = []
             for i in self.itemsList(without_none=True):
@@ -148,7 +148,7 @@ class Inventory:
         return all([s.item is not None for s in self.slots])
 
     def contains(self, item):
-        return item in self.itemsList()
+        return item in self.itemsList() or self.linked_inv and self.linked_inv.contains(item)
 
     def __eq__(self, other):
         if isinstance(other, bool):  # Пустой ли инвентарь
@@ -186,6 +186,7 @@ class Item:
         :param stats: Словарь статов предмета(например {'damage': 5}
         :param for_slot: Для слота с определнным названием
         """
+        # TODO Прокачка предмета
         if stats is None:
             stats = {}
         self.name = name

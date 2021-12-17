@@ -58,9 +58,19 @@ class Quest:
             hero.inventory.append(self.reward)
             if self.target.typ == 'collect':
                 hero.inventory.clear(self.target.obj, self.target.count)
+            elif self.target.typ == 'kill':
+                hero.kills_counter[self.target.obj] = 0
             hero.quests.remove(self)
             return True
         return False
+
+    def progress(self, hero) -> int:
+        if self.target.typ == 'collect':
+            return int(hero.inventory.itemsList().count(self.target.obj) / self.target.count * 100)
+        elif self.target.typ == 'kill':
+            return int(hero.kills_counter.get(self.target.obj, 0) / self.target.count * 100)
+        elif self.target.typ == 'sell':
+            return int(self.target.sell_count / self.target.count * 100)
 
     def text(self):
         return str(self.target)
@@ -73,23 +83,24 @@ class Target:
     def __init__(self, typ: str, obj, count: int):
         """Конструктор Цели для квеста
 
-        :param typ: Тип цели(collect, kill)
+        :param typ: Тип цели(collect, kill, sell)
         :param obj: Обьект для достижения цели (Item, enemy_name)
         :param count: Кол-во обьектов для достижения цели
         """
         self.typ = typ
         self.obj = obj
         self.count = int(count)
+        if self.typ == 'sell':
+            self.sell_count = 0
 
     def check_done(self, hero):
         """Проверка на выполнение квеста"""
         if self.typ == 'collect':
-            if hero.inventory.itemsList().count(self.obj) >= self.count:
-                return True
+            return hero.inventory.itemsList().count(self.obj) >= self.count
         elif self.typ == 'kill':
-            if hero.kills_counter.get(self.obj, 0) >= self.count:
-                return True
-        return False
+            return hero.kills_counter.get(self.obj, 0) >= self.count
+        elif self.typ == 'sell':
+            return self.sell_count >= self.count
 
     def copy(self):
         return Target(self.typ, self.obj, self.count)
@@ -100,6 +111,8 @@ class Target:
             s += f'Собери {self.count} {self.obj}'
         elif self.typ == 'kill':
             s += f'Убей {self.count} {self.obj}'
+        elif self.typ == 'sell':
+            s += f'Продай {self.count} {self.obj}'
         return s
 
 
@@ -122,12 +135,15 @@ class Fight:
         a_stats = self.attacker.getFightStats()
         t_stats = self.target.getFightStats()
         if self.attacker_turn:
-            self.target.health -= max([0, a_stats['damage'] - t_stats['armor']])
+            dmg = max([0, a_stats['damage'] - t_stats['armor']]) + random.randint(-int(0.5 * a_stats['damage']),
+                                                                                  int(0.5 * a_stats['damage']))
+            self.target.health -= dmg
         else:
-            self.attacker.health -= max([0, t_stats['damage'] - a_stats['armor']])
+            dmg = max([0, t_stats['damage'] - a_stats['armor']]) + random.randint(-int(0.5 * t_stats['damage']),
+                                                                                  int(0.5 * t_stats['damage']))
+            self.attacker.health -= dmg
 
-        return max([0, a_stats['damage'] - t_stats['armor']]) if self.attacker_turn else \
-            max([0, t_stats['damage'] - a_stats['armor']])
+        return dmg
 
     def _end(self):
         winner = self.attacker if self.target.health <= 0 else self.target if self.attacker.health <= 0 else None
@@ -226,7 +242,8 @@ locations_list: dict = {
         'maxy': HEIGHT * 20,
         'basic_blocks_spritename': 'sand',
         'structures': {
-            'Ruins': 30
+            'Ruins': 30,
+            'Sand house': 10
         },
         'cities': ["Первый поселок", "Вторчинск", "Третьяковка"]
     }
@@ -290,7 +307,8 @@ npcs_list = {
             Item.getItem('Булава'),
             Item.getItem('Топорик'),
             Item.getItem('Ботинки')
-        ]
+        ],
+        'image_name': 'sprites/npc.png'
     },
     'Странствующий торговец': {
         'loc_name': 'пустыня',
@@ -299,19 +317,23 @@ npcs_list = {
             Item.getItem('Стеклянный меч'),
             Item.getItem('Штаны'),
             Item.getItem('Ботинки')
-        ]
+        ],
+        'image_name': 'sprites/npc.png'
     },
     'quester': {
         'loc_name': 'болото',
         'quests': [
-            Quest(*Handler.get_quest('А', init=False)),
-            Quest(*Handler.get_quest('Б', init=False))
-        ]
+            'А',
+            'Б',
+            'Продать'
+        ],
+        'image_name': 'sprites/npc.png'
     }
 }
 enemy_list = {
     'Монстр': {
         'loc_name': 'болото',
+        'image_name': 'sprites/swamp_enemy2.png',
         'inventory': [
             'шняга'
         ],
@@ -322,6 +344,7 @@ enemy_list = {
     },
     'Защитник гор': {
         'loc_name': 'горы',
+        'image_name': 'sprites/mountain_enemy2.png',
         'inventory': [
             'шняга'
         ],
@@ -333,6 +356,7 @@ enemy_list = {
     },
     'Обезумевший': {
         'loc_name': 'пустыня',
+        'image_name': 'sprites/desert_enemy1.png',
         'inventory': [
             'шняга'
         ],
@@ -341,3 +365,7 @@ enemy_list = {
         ]
     }
 }
+
+help_text = '''
+
+'''  # TODO Заполнить текст помощи

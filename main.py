@@ -6,6 +6,89 @@ from location import *
 from DBHandler import *
 
 
+class HeroInfoMenu:
+    def __init__(self):
+        pygame.font.init()
+        self.font = pygame.font.Font(pygame.font.match_font('arial'), 25)
+        self.button1 = ('Назад', pygame.rect.Rect(10, HEIGHT - 50, 300, 40), StartMenu.show)
+        self.buttons = [self.button1]
+
+    def draw(self, screen: pygame.Surface):
+        screen.fill((61, 61, 61))
+        f = pygame.font.Font(pygame.font.match_font('arial'), 70)
+        screen.blit(f.render("Герой", True, BLACK), (300, 10))
+        q: Quest = Hero.hero_object.profile.get('main quest')
+        screen.blit(self.font.render(f"Цель жизни: {q.text()} ({q.progress(Hero.hero_object)}%)", True, BLACK),
+                    (10, 85))
+        screen.blit(self.font.render(f"Характер: {Hero.hero_object.profile['hero character']}", True, BLACK),
+                    (10, 110))
+        for text, rect, _ in self.buttons:
+            s = pygame.Surface((rect.width, rect.height))
+            s.fill(GRAY)
+            screen.blit(s, rect.topleft)
+            screen.blit(self.font.render(text, True, WHITE),
+                        (rect.centerx - len(text) * 6, rect.top + rect.height // 6))
+
+    def on_click(self, pos):
+        for _, rect, func in self.buttons:
+            if rect.collidepoint(*pos):
+                func()
+
+    @staticmethod
+    def show():
+        global draw_menu
+        draw_menu = HeroInfoMenu()
+
+
+class StartMenu:
+    def __init__(self):
+        pygame.font.init()
+        self.font = pygame.font.Font(pygame.font.match_font('arial'), 25)
+        self.button1 = ('Начать', pygame.rect.Rect(WIDTH // 2 - 150, 150, 300, 40), self.start_button)
+        self.button2 = ('Герой', pygame.rect.Rect(WIDTH // 2 - 150, 200, 300, 40), HeroInfoMenu.show)
+        self.button3 = ('Помощь', pygame.rect.Rect(WIDTH // 2 - 150, 250, 300, 40), self.showHelpText)
+        self.buttons = [self.button1, self.button2, self.button3]
+
+        self.text = ''
+
+    def start_button(self):
+        global draw_menu
+        draw_menu = None
+
+    def showHelpText(self):
+        self.text = help_text
+
+    def draw(self, screen: pygame.Surface):
+        screen.fill((61, 61, 61))
+        f = pygame.font.Font(pygame.font.match_font('arial'), 70)
+        screen.blit(f.render("RANDOM GAME", True, BLACK), (132, 20))
+        if self.text:
+            y = 10
+            for s in self.text.split('\n'):
+                screen.blit(self.font.render(s, True, WHITE),
+                            (10, y))
+                y += 30
+            buttons = []
+        else:
+            buttons = self.buttons
+        for text, rect, _ in buttons:
+            s = pygame.Surface((rect.width, rect.height))
+            s.fill(GRAY)
+            screen.blit(s, rect.topleft)
+            screen.blit(self.font.render(text, True, WHITE),
+                        (rect.centerx - len(text) * 6, rect.top + rect.height // 6))
+
+    def on_click(self, pos):
+        for _, rect, func in self.buttons:
+            if rect.collidepoint(*pos):
+                func()
+
+    @staticmethod
+    def show():
+        global draw_menu, start_menu
+        draw_menu = start_menu
+
+
 class App:
     def __init__(self):
         pygame.init()
@@ -15,6 +98,7 @@ class App:
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(pygame.font.match_font('arial'), 25)
         self.small_font = pygame.font.Font(pygame.font.match_font('arial'), 14)
+        self.normal_font = pygame.font.Font(pygame.font.match_font('arial'), 20)
         self.all_sprites = pygame.sprite.Group()
         self.running = True
         self.show_info = False
@@ -32,10 +116,11 @@ class App:
             Location(locname, **params)
         self.hero = Hero()
         Hero.app = self
-        self.hero.inventory('hands', Item.getItem('Ban hammer'))
+        self.hero.inventory('hands', Item.getItem('булава'))
         self.all_sprites.add(self.hero)
 
     def run(self):
+        global draw_menu
         running = True
         cam_move = (0, 0)
         show_text = ''
@@ -47,6 +132,16 @@ class App:
             pygame.display.set_caption(str(self.clock.get_fps()))
 
             # Обновление
+            if draw_menu:  # Рендер меню
+                draw_menu.draw(self.screen)
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        running = False
+                    elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                        draw_menu.on_click(pygame.mouse.get_pos())
+                pygame.display.flip()
+                continue
+
             if self.dialog:
                 self.hero.is_moving = False
                 self.dialog.character.is_moving = False
@@ -55,6 +150,7 @@ class App:
 
             self.hero.velocity += cam_move
             curr_loc = Location.get_location(self.hero.velocity.x, self.hero.velocity.y)
+            self.hero._curr_loc = curr_loc
             self.hero.update()
             for s in curr_loc.getSpritesToUpdate(self.hero.velocity):  # sprites update
                 s.update()
@@ -63,7 +159,6 @@ class App:
                 e = curr_loc.spawnEnemy()
                 if e:
                     self.all_sprites.add(e)
-            self.hero._curr_loc = curr_loc
             self.hero.in_city = False
             if curr_loc:  # TODO Иначе если вышли за карту?
                 for strc in curr_loc.structures_list:  # Проверка на коллизию со структурами
@@ -97,6 +192,8 @@ class App:
                             self.enter_action = self.enter_action[:-1]
                         else:
                             self.enter_action += event.unicode
+                    elif event.key == pygame.K_ESCAPE:
+                        StartMenu.show()
                     elif event.key == pygame.K_p:  # Прекращение передвижения героя
                         self.hero.is_moving = not self.hero.is_moving
                     elif event.key == pygame.K_a:
@@ -129,8 +226,8 @@ class App:
                 show_text = ''
                 lasttime_showtext = None
             if self.hero.curr_fight:
-                if (datetime.datetime.now().now() - self.hero.curr_fight.lasttime).seconds > \
-                        3 - 2 * Hero.update_boost:
+                if (datetime.datetime.now().now() - self.hero.curr_fight.lasttime).total_seconds() > \
+                        2 - 1.5 * Hero.update_boost:
                     lasttime_showtext = datetime.datetime.now()
                     self.hero.curr_fight.lasttime = datetime.datetime.now()
                     show_text = self.hero.curr_fight.next()
@@ -150,8 +247,16 @@ class App:
             self.screen.blit(sprite.image, sprite.rect.topleft - self.hero.velocity + (0, 25))
         self.screen.blit(self.hero.image, self.hero.rect.topleft)
 
+        # --- Render main info
         self.screen.blit(self.font.render(f"X,Y: {self.hero.rect.center + self.hero.velocity - (0, 25)}",
                                           True, WHITE), (0, 0))
+        for i, s in enumerate(self.hero.journal):
+            t = self.normal_font.render(s, True, WHITE)
+            bg = pygame.Surface((t.get_size()[0] + 5, t.get_size()[1]),
+                                masks=(121, 61, 78))
+            bg.set_alpha(100)
+            self.screen.blit(bg, (WIDTH - t.get_width() - 5, i * 22))
+            self.screen.blit(t, (WIDTH - t.get_width() - 5, i * 22))
 
         # --- Render fight info
         if self.hero.curr_fight:
@@ -175,7 +280,8 @@ class App:
 
         # --- Render dialog
         if self.dialog:
-            if (datetime.datetime.now() - self.dialog.lasttime).seconds >= 2 - 1.5 * Hero.update_boost:
+            if (datetime.datetime.now() - self.dialog.lasttime).total_seconds() >= \
+                    2 - 1.5 * Hero.update_boost:
                 a = next(self.dialog)
                 if a:
                     self.dialog_pos, self.dialog_text = (a[0], a[1]), a[2]
@@ -197,7 +303,7 @@ class App:
 
         if self.show_info:
             s = pygame.Surface((WIDTH // 2 - 25, HEIGHT), pygame.SRCALPHA)
-            s.set_alpha(180)
+            s.set_alpha(200)
             s.fill((121, 61, 78))
             self.screen.blit(s, (0, 0))
             self.screen.blit(self.font.render(f'Монет: {self.hero.coins}', True, FONT_TEXT),
@@ -211,7 +317,8 @@ class App:
             self.screen.blit(self.font.render('Квесты:', True, FONT_TEXT), (0, (i + 1) * 22))
             for q in self.hero.quests:
                 i += 1
-                self.screen.blit(self.font.render(f'{q.name}) {q.target}', True, FONT_TEXT), (0, (i + 1) * 22))
+                self.screen.blit(self.normal_font.render(f'{q.name}) {q.target} ({q.progress(self.hero)}%)',
+                                                  True, FONT_TEXT), (0, (i + 1) * 22))
             self.hero.inventory.draw(self.screen)
         mouse_x, mouse_y = pygame.mouse.get_pos()
         for chrt in curr_loc.characters:
@@ -223,7 +330,7 @@ class App:
                                 (rect.left, rect.top - BLOCK_SIZE + 25))
         if show_text:
             if isinstance(show_text, str):  # отображение по центру
-                y = 25
+                y = HEIGHT // 2
                 for s in show_text.split('\n'):
                     self.screen.blit(self.font.render(s, True, GRAY),
                                      (WIDTH // 2, y))
@@ -239,5 +346,7 @@ class App:
 
 
 if __name__ == '__main__':
+    start_menu = StartMenu()
+    draw_menu = start_menu
     app = App()
     app.run()

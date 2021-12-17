@@ -1,3 +1,5 @@
+from copy import copy
+
 from config import *
 import pygame
 from datetime import datetime
@@ -9,11 +11,16 @@ from funcs import *
 
 
 class Character(pygame.sprite.Sprite):
-    def __init__(self, x: int, y: int, color: Tuple[int, int, int] = SKINCOLOR):
+    def __init__(self, x: int, y: int, color: Tuple[int, int, int] = SKINCOLOR,
+                 image_name=None):
         """Конструктор класса персонаж. Персонаж это НПС, враг и герой"""
         pygame.sprite.Sprite.__init__(self)
-        self.image = pygame.Surface((40, 40))
-        self.image.fill(color)
+        if image_name is None:
+            self.image = pygame.Surface((40, 40))
+            self.image.fill(color)
+        else:
+            self.image = pygame.image.load(image_name).convert()
+            self.image.set_colorkey(WHITE)
         self.rect = self.image.get_rect()
         self.rect.center = (x, y)
         self.health = 100
@@ -40,7 +47,7 @@ class Character(pygame.sprite.Sprite):
 
 class Hero(Character):
     ACTIONS = ((1, complete_quest), (2, loot_nearest_structure),
-               (1, hero_buy_equipment))  # кортеж действий, хранящий функции(из config)
+               (1, hero_buy_equipment), (0.5, to_nearest_enemy))  # кортеж действий, хранящий функции(из config)
     # TODO Продать вещи
     SUBACTIONS = (hero_sell_items, to_nearest_enemy)
     hero_object: 'Hero' = None
@@ -53,7 +60,8 @@ class Hero(Character):
         :param velocity: Param for camera
         :param is_moving: Может ли герой идти
         """
-        Character.__init__(self, WIDTH // 2, HEIGHT // 2, DARK_RED)
+        Character.__init__(self, WIDTH // 2, HEIGHT // 2, DARK_RED,
+                           image_name='sprites/hero.png')
         self.name = 'Герой'
         self.velocity = pygame.math.Vector2(0, 0)
         self.lasttime = datetime.now()
@@ -75,8 +83,37 @@ class Hero(Character):
         self.queue_move_to = []
         self.task = ''
 
+        self.journal = []
+        self.profile = {}
+        self.init_profile()
+
+    def init_profile(self):
+        self.profile['main quest'] = Handler.get_quest(None, is_main_quest=True)
+        self.profile['good level'] = round(random.uniform(-0.5, 0.5), 2)
+        characters = [([x / 100.0 for x in range(-50, -30)], 'абсолютно злой'),
+                      ([x / 100.0 for x in range(-30, -5)], 'агрессивный'),
+                      ([x / 100.0 for x in range(-5, 5)], 'нормальный'),
+                      ([x / 100.0 for x in range(5, 30)], 'добродушный'),
+                      ([x / 100.0 for x in range(30, 50)], 'абсолютно добрый')]
+        self.profile['hero character'] = [j for i, j in characters if self.profile['good level'] in i][0]
+        acts = copy(Hero.ACTIONS)
+        Hero.ACTIONS = []
+        for w, act in acts:
+            if act == to_nearest_enemy:
+                if self.profile['hero character'] == 'абсолютно злой':
+                    Hero.ACTIONS.append((1.5, to_nearest_enemy))
+                elif self.profile['hero character'] == 'абсолютно добрый':
+                    Hero.ACTIONS.append((0.1, to_nearest_enemy))
+            elif act == loot_nearest_structure:
+                if self.profile['hero character'] == 'абсолютно злой':
+                    Hero.ACTIONS.append((w + 0.2, loot_nearest_structure))
+                elif self.profile['hero character'] == 'абсолютно добрый':
+                    Hero.ACTIONS.append((w - 0.2, loot_nearest_structure))
+            else:
+                Hero.ACTIONS.append((w, act))
+
     def update(self):
-        if (datetime.now() - self.lasttime).seconds > 1 - 0.8 * Hero.update_boost \
+        if (datetime.now() - self.lasttime).microseconds > 800000 - 600000 * Hero.update_boost \
                 and self.is_moving and self.curr_fight is None:
             # Совершение случайного действия раз в 3 секунды
             self.lasttime = datetime.now()
@@ -88,7 +125,6 @@ class Hero(Character):
                 # TODO Следование по заданному алгоритмом пути
                 if isinstance(self.move_to, NPC):  # Проверка на нахождение рядом с целью(НПС)
                     x, y = self.move_to.onWorldPos()
-                    # y = self.move_to.rect.center[1] - self.velocity.y
                     # Если на расстоянии 3-ех блоков...
                     if x in range(int(self.rect.centerx + self.velocity.x - 100),
                                   int(self.rect.centerx + self.velocity.x + 100)) \
@@ -99,7 +135,6 @@ class Hero(Character):
                             if self.quests[0].target.check_done(self):
                                 self.move_to.dialog(quest='pass')
                                 self.move_to = None
-                                print("PASS")
                         elif self.task.lower() == 'get quest':
                             if self.move_to.quests:
                                 self.move_to.dialog(quest='get')
@@ -142,7 +177,9 @@ class Hero(Character):
                         to_nearest_city(self)
                     elif not choices([a for _, a in self.ACTIONS],
                                      weights=[w for w, _ in self.ACTIONS])[0](self):
-                        random_point(self)
+                        if not choices([a for _, a in self.ACTIONS],
+                                       weights=[w for w, _ in self.ACTIONS])[0](self):
+                            random_point(self)
 
     def add_velocity(self, value: tuple):
         self.velocity += value
@@ -172,24 +209,40 @@ class Hero(Character):
         self.velocity = pygame.math.Vector2(0, 0)
         self.rect.center = (WIDTH // 2, HEIGHT // 2)
         self.death_count += 1
+        self.health = 100
+
+    def onSellItem(self, item):
+        for q in self.quests:
+            if q.target.typ == 'sell' and q.target.obj == item:
+                q.target.sell_count += 1
+
+    def onAction(self, action_name):
+        phrases = Handler.get_journalphrase(action_name)
+        if phrases:
+            self.journal.append(choice(phrases))
+            if len(self.journal) > 5:
+                self.journal.pop(0)
 
 
 class NPC(Character):
     ACTIONS = (up, left, right, down)
 
-    def __init__(self, x: int, y: int, name: str, loc, app, structure=None):
+    def __init__(self, x: int, y: int, name: str, loc, app, structure=None,
+                 image_name=None):
         """Конструктор класса НПС(мирный)
 
         :param loc: Прикрепление к локации
         :param app: class App from main.py
         :param structure: Прикрепление к структуре(необяз)
         """
-        Character.__init__(self, x, y, SKINCOLOR)
+        # TODO Эпический НПС(торговец, продает эпические предметы, есть только в городе)
+        Character.__init__(self, x, y, image_name=image_name)
         self.loc = loc
         self.app = app
         self.name = name
         self.structure = structure
         self.quests: List['Quest'] = []
+        self.hero_get_quests_index = []
         self.sell_items: List['Item'] = []
         self.lasttime = datetime.now()
         self.loc.characters.append(self)
@@ -207,19 +260,26 @@ class NPC(Character):
         if quest and self.quests:
             # --- Функциональная часть
             if quest == 'get':
-                if not self.quests[0] in Hero.hero_object.quests:
-                    Hero.hero_object.quests.append(self.quests[0])
+                i = randint(0, len(self.quests) - 1)
+                if not self.quests[i] in Hero.hero_object.quests:
+                    if hero_need_quest(Hero.hero_object, self.quests[i]):
+                        Hero.hero_object.quests.append(self.quests[i])
+                        self.hero_get_quests_index.append(i)
+                    else:
+                        quest = 'no'
             elif quest == 'pass':
-                if self.quests[0].pass_quest(Hero.hero_object):
-                    self.quests.pop(0)
-                else:
-                    return
+                for i in self.hero_get_quests_index:
+                    if self.quests[i].pass_quest(Hero.hero_object):
+                        self.quests.pop(i)
+                        self.hero_get_quests_index.remove(i)
+                    else:
+                        return
             # --- Возвращение текста
             i = Handler.get_dialog(f'quest_{quest}')
             params = {}
             for param in i[3].split(','):  # Заполнение из need_params для форматирования text
                 if param.strip() == 'quest_text':
-                    params['quest_text'] = self.quests[0].text()
+                    params['quest_text'] = self.quests[self.hero_get_quests_index[-1]].text()
             left(Hero.hero_object.velocity, Hero.hero_object.rect)
             self.app.dialog = Dialog(Hero.hero_object, self, [i[2].format(**params)])
         elif trade:
@@ -290,6 +350,7 @@ class NPC(Character):
                     if hero_need_item_sell(Hero.hero_object, item):
                         item.price = price
                         Hero.hero_object.coins += price
+                        Hero.hero_object.onSellItem(item)
                         Hero.hero_object.inventory.clear(item)
                         text.append("Согласен!")
                     else:
@@ -300,7 +361,7 @@ class NPC(Character):
     def update(self):
         if not self.app.dialog:
             self.is_moving = True
-        if (datetime.now() - self.lasttime).seconds > 3 - 2.8 * Hero.update_boost and self.is_moving:
+        if (datetime.now() - self.lasttime).microseconds > 800000 - 600000 * Hero.update_boost and self.is_moving:
             self.lasttime = datetime.now()
             if self.structure:
                 choice(self.ACTIONS)(self.rect, None,
@@ -323,13 +384,14 @@ class NPC(Character):
 class Enemy(Character):
     ACTIONS = (move_to_point,)
 
-    def __init__(self, x: int, y: int, name: str, loc, structure=None):
+    def __init__(self, x: int, y: int, name: str, loc, structure=None,
+                 image_name=None):
         """Конструктор класса Враг
 
         :param loc: Прикрепление к локации
         :param structure: Прикрепление к структуре(необяз)
         """
-        Character.__init__(self, x, y)
+        Character.__init__(self, x, y, image_name=image_name)
         self.loc = loc
         self.name = name
         self.structure = structure
@@ -353,7 +415,7 @@ class Enemy(Character):
         del self
 
     def update(self):
-        if (datetime.now() - self.lasttime).seconds > 0.2 - 0.15 * Hero.update_boost \
+        if (datetime.now() - self.lasttime).microseconds > 750000 - 650000 * Hero.update_boost \
                 and self.curr_fight is None:
             self.lasttime = datetime.now()
             choice(self.ACTIONS)(self.rect, self.move_to.onWorldPos(),

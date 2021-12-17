@@ -5,6 +5,7 @@ from config import BLOCK_SIZE, WIDTH, HEIGHT
 
 
 # --- Вспомогательные функции
+# --- База данных
 def do_action(string: str, hero):
     from DBHandler import Handler
     from character import Hero
@@ -15,6 +16,8 @@ def do_action(string: str, hero):
         if any([w in string for w in words]) \
                 and any([w in string for w in add_words]):
             break
+        else:
+            act = None
     if act == 'loot_structure':
         loot_nearest_structure(hero)
     elif act == 'get_quest':
@@ -52,6 +55,11 @@ def move_to_point(velocity, point: tuple, rect=None,
 
 
 def up(velocity, rect, mincoords=(0, 0), maxcoords=(WIDTH * 20, HEIGHT * 20)):
+    if mincoords[0] < 0:
+        mincoords = (0, mincoords[1])
+    if mincoords[1] < 0:
+        mincoords = (mincoords[0], 0)
+
     if velocity.y - BLOCK_SIZE >= mincoords[1]:
         velocity.y -= BLOCK_SIZE
     else:
@@ -68,6 +76,11 @@ def down(velocity, rect, mincoords=(0, 0), maxcoords=(WIDTH * 20, HEIGHT * 20)):
 
 
 def left(velocity, rect, mincoords=(0, 0), maxcoords=(WIDTH * 20, HEIGHT * 20)):
+    if mincoords[0] < 0:
+        mincoords = (0, mincoords[1])
+    if mincoords[1] < 0:
+        mincoords = (mincoords[0], 0)
+
     if velocity.x - BLOCK_SIZE >= mincoords[0]:
         velocity.x -= BLOCK_SIZE
     else:
@@ -87,6 +100,7 @@ def random_point(hero):
     hero.move_to = pygame.math.Vector2(randrange(0, WIDTH * 19, 50),
                                        randrange(0, HEIGHT * 19, 50))
     hero.task = 'moving'
+    hero.onAction('move random')
 
 
 def to_nearest_enemy(hero, enemy_name=None):
@@ -101,6 +115,7 @@ def to_nearest_enemy(hero, enemy_name=None):
                     min_pos = (dist, chrt)
     if min_pos[1]:
         hero.move_to = min_pos[1]
+        hero.onAction('move enemy')
         return True
     return False
 
@@ -117,6 +132,7 @@ def loot_nearest_structure(hero):
                 min_pos = (dist, s)
     if min_pos[1]:
         hero.move_to = pygame.math.Vector2(min_pos[1].x, min_pos[1].y)
+        hero.onAction('move structure')
         return True
     return False
 
@@ -133,6 +149,7 @@ def to_nearest_city(hero):
                 min_pos = (dist, s)
     if min_pos[1]:
         hero.move_to = pygame.math.Vector2(min_pos[1].x, min_pos[1].y)
+        hero.onAction('move city')
         return True
     return False
 
@@ -140,13 +157,32 @@ def to_nearest_city(hero):
 # --- Квесты
 
 
-def complete_quest(hero):
-    if hero.quests:
-        q = hero.quests[0]
+def hero_need_quest(hero, quest) -> bool:
+    w_no, w_yes = 0.1, 0.1
+    if hero.profile['hero character'] == 'абсолютно добрый':
+        if quest.target.typ == 'kill':
+            w_no += 2
+        else:
+            w_yes += 0.5
+    elif hero.profile['hero character'] == 'добродушный':
+        if quest.target.typ == 'kill':
+            w_no += 0.5
+        else:
+            w_yes += 0.5
+    else:
+        w_yes += 0.5
+    return choices([False, True], weights=[w_no, w_yes])[0]
+
+
+def complete_quest(hero, q=None):
+    if hero.quests or q:
+        if q is None:
+            q = hero.quests[0]
         if q.target.typ == 'collect':
             if q.target.check_done(hero):
                 hero.task = 'pass quest'
                 hero.move_to = q.owner
+                hero.onAction('move pass quest')
                 return True
             if loot_nearest_structure(hero):
                 return True
@@ -154,7 +190,19 @@ def complete_quest(hero):
                 return to_nearest_enemy(hero)
         elif q.target.typ == 'kill':
             return to_nearest_enemy(hero, q.target.obj)
+        elif q.target.typ == 'sell':
+            if q.target.check_done(hero):
+                hero.task = 'pass quest'
+                hero.move_to = q.owner
+                hero.onAction('move pass quest')
+                return True
+            if hero.inventory.contains(q.target.obj):
+                return hero_sell_items(hero)
+            else:
+                return loot_nearest_structure(hero)
     else:
+        if hero.profile.get('main quest'):
+            return complete_quest(hero, hero.profile.get('main quest'))
         return get_quest(hero)
     return False
 
@@ -171,6 +219,7 @@ def get_quest(hero):
     if min_pos[1]:
         hero.move_to = min_pos[1]
         hero.task = 'get quest'
+        hero.onAction('move get quest')
         return True
     return False
 
@@ -201,9 +250,10 @@ def hero_need_item_buy(hero, item):
 def hero_need_item_sell(hero, item):
     """Нужен ли предмет герою для продажи"""
     w_yes, w_no = 0.1, 0.1
-    q_items = []  # Quest items
+    q_items, sell_q_items = [], []  # Quest items
     if hero.quests:
         q_items = [(q.target.obj, q.target.count) for q in hero.quests if q.target.typ == 'collect']
+        sell_q_items = [q.target.obj for q in hero.quests if q.target.typ == 'sell']
     if item.for_slot and item.type == 'equipment':
         if hero.equipment(item.for_slot) is None:
             w_no += 1
@@ -222,6 +272,8 @@ def hero_need_item_sell(hero, item):
                 w_no += 2
             else:
                 w_yes += 1
+        elif item in sell_q_items:
+            w_yes += 2
         else:
             w_yes += 1
     f = choices([True, False], weights=[w_yes, w_no])[0]
@@ -242,6 +294,7 @@ def hero_sell_items(hero):
             hero.queue_move_to.append(hero.move_to)
         hero.move_to = min_pos[1]
         hero.task = 'trade sell'
+        hero.onAction('move trade sell')
 
 
 def hero_buy_equipment(hero):
@@ -261,5 +314,6 @@ def hero_buy_equipment(hero):
             hero.queue_move_to.append(hero.move_to)
         hero.move_to = min_pos[1]
         hero.task = 'trade buy'
+        hero.onAction('move trade buy')
         return True
     return False

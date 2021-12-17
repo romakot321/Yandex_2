@@ -1,0 +1,35 @@
+<texts>
+    <action name="move trade buy">
+        <text>Что ж, пора обновиться!</text>
+        <text>Настал момент шоппинга.</text>
+    </action>
+    <action name="move trade sell">
+        <text>Продам пару вещичек, заработаю на отдых</text>
+        <text>Надо бы освободить карманы</text>
+    </action>
+    <action name="move city">
+        <text>Самое время зайти в город</text>
+    </action>
+    <action name="move enemy">
+        <text>Хочется начистить тому уроду лицо</text>
+        <text>Что то руки чешутся</text>
+    </action>
+    <action name="move structure">
+        <text>Судя по карте, рядом находиться богатый дом...</text>
+        <text>Моя чуйка подсказывает, что рядом трофеи</text>
+        <text>Этот запах трофеев так и манит...</text>
+    </action>
+    <action name="move pass quest">
+        <text>Наконец выполнил задание! Пойду отчитаюсь.</text>
+        <text>Вот и освободил свою совесть на еще один пункт</text>
+    </action>
+    <action name="move random">
+        <text>Хочу просто погулять</text>
+        <text>По моему, внеплановый поход - отличная идея</text>
+    </action>
+    <action name="move get quest">
+        <text>А почему бы не взять задание?</text>
+        <text>Пойти квест взять чтоль...</text>
+        <text>В моей жизни не хватает новых обязанностей</text>
+    </action>
+</texts>
