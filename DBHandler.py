@@ -2,6 +2,7 @@ import sqlite3
 from random import choice
 from typing import Dict, Any
 import xml.etree.ElementTree as ET
+from pickle import dump, load
 
 
 class Handler:
@@ -10,21 +11,43 @@ class Handler:
     texts = ET.parse('texts.xml').getroot()
 
     @staticmethod
-    def get_locations_params(loc_name) -> tuple:
-        # TODO получение всех параметвор локации, вовращает None если такой локации нет
-        # Иначе возвращает параметры в виде (param_name, param_value)
-        pass
+    def save_hero(hero):
+        with open(f'save_hero', 'wb+') as f:
+            dump(hero, f)
+
+    @staticmethod
+    def get_hero():
+        try:
+            with open(f'save_hero', 'rb') as f:
+                return load(f)
+        except FileNotFoundError:
+            return None
+
+    @staticmethod
+    def get_locations_params(loc_name) -> dict:
+        try:
+            with open(f'save_{loc_name}', 'rb') as f:
+                return load(f)
+        except FileNotFoundError:
+            return None
+        except EOFError:
+            return None
 
     @staticmethod
     def save_locations_params(**params: Dict[str, Any]):
         """
-        :param params: {(param_name, param_value)}
+        :param params: {(param_name: param_value)}
         """
-        # TODO сохранение всех параметвор локации
-        pass
+        with open(f'save_{params["name"]}', 'wb+') as f:
+            dump(params, f)
 
     @staticmethod
     def get_dialog(dialog_name):
+        """
+
+        :param dialog_name: Название диалога
+        :return: (id, name, text, need_params)
+        """
         a = Handler.cur.execute(f'SELECT * FROM dialog WHERE name = "{dialog_name}"').fetchall()
         if a:
             return a[0]
@@ -100,3 +123,11 @@ class Handler:
         for action in Handler.texts:
             if action_name == action.attrib['name']:
                 return [i.text for i in action]
+
+    @staticmethod
+    def get_tendencies() -> dict:
+        result = Handler.cur.execute('SELECT * FROM tendencies').fetchall()
+        ret = {}
+        for n, t, i in result:
+            ret[n] = {'typ': t, 'info': i}
+        return ret

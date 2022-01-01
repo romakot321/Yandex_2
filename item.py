@@ -35,7 +35,7 @@ class Inventory:
 
     def draw(self, screen):
         font = pygame.font.Font(pygame.font.match_font('arial'), 18)
-        inv_surf = pygame.image.load('sprites/inventory.png')
+        inv_surf = pygame.image.load('images/inventory.png')
         inv_surf.set_alpha(200)
         screen.blit(inv_surf, inv_surf.get_rect(topleft=(375, 0)))
         x, y = (375 + 34, 85)  # координаты 1 слота
@@ -179,6 +179,8 @@ class Slot(Inventory):
 
 
 class Item:
+    ALL_STATS = ('price', 'drop_chance', 'armor', 'damage')
+
     def __init__(self, name, type='collectable', for_slot=None, **stats):
         """
         :param name:
@@ -186,16 +188,23 @@ class Item:
         :param stats: Словарь статов предмета(например {'damage': 5}
         :param for_slot: Для слота с определнным названием
         """
-        # TODO Прокачка предмета
         if stats is None:
             stats = {}
+        self.stats = stats
         self.name = name
         self.type = type
         self.for_slot = for_slot
-        self.stats = stats
+        self.level = 1
 
     def copy(self):
         return Item(self.name, self.type, self.for_slot, **self.stats)
+
+    def upgrade(self):
+        if self.damage > 0:
+            self.stats['damage'] += round(self.damage / 100 * (60 / self.level))
+        if self.armor > 0:
+            self.stats['armor'] += round(self.armor / 100 * (60 / self.level))
+        self.level += 1
 
     @staticmethod
     def better_item(item1, item2) -> bool:
@@ -219,12 +228,17 @@ class Item:
         return a[0] if a else None
 
     def __getattr__(self, item):
-        if item in self.__dict__:
-            return self.__dict__[item]
-        return self.stats.get(item, 0)
+        if self.__dict__:
+            if item in self.__dict__:
+                return self.__dict__[item]
+            elif item in self.__dict__['stats']:
+                return self.__dict__['stats'][item]
+            elif item in Item.ALL_STATS:
+                return 0
+        raise AttributeError
 
     def __str__(self):
-        return self.name
+        return self.name + f' (+{self.level - 1})' if self.type == 'equipment' else self.name
 
     def __eq__(self, other):
         if isinstance(other, Item):

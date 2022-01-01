@@ -234,8 +234,7 @@ def hero_need_item_buy(hero, item):
         if hero.equipment(item.for_slot) is None:
             w_yes += 1
         else:
-            i = hero.equipment(item.for_slot)
-            if i.damage < item.damage or i.armor < item.armor:
+            if item.better_item(item, hero.equipment(item.for_slot)):
                 w_yes += 1
             else:
                 w_no += 0.5
@@ -266,9 +265,11 @@ def hero_need_item_sell(hero, item):
             else:
                 w_yes += 0.5
     elif item.type == 'collectable':
-        if item in [i for i, _ in q_items]:
+        if item in [t.info[1] for t in hero.profile['tendencies'] if t.info[0] == 'like_item']:  # Если привязанность
+            w_no += 5
+        elif item in [i for i, _ in q_items]:  # Если квестовый предмет
             if [i.name for i in hero.inventory.itemsList(without_none=True)].count(item.name) - 1 <= \
-                    [c for i, c in q_items if i.name == item.name][0]:
+                    [c for i, c in q_items if i.name == item.name][0]:  # и кол-во <= необходимого
                 w_no += 2
             else:
                 w_yes += 1

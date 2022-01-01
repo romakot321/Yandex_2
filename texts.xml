@@ -2,9 +2,10 @@
     <action name="move trade buy">
         <text>Что ж, пора обновиться!</text>
         <text>Настал момент шоппинга.</text>
+        <text>Покупочки-покупочки</text>
     </action>
     <action name="move trade sell">
-        <text>Продам пару вещичек, заработаю на отдых</text>
+        <text>Продам пару вещичек - заработаю на отдых</text>
         <text>Надо бы освободить карманы</text>
     </action>
     <action name="move city">
@@ -31,5 +32,9 @@
         <text>А почему бы не взять задание?</text>
         <text>Пойти квест взять чтоль...</text>
         <text>В моей жизни не хватает новых обязанностей</text>
+    </action>
+    <action name="item upgrade">
+        <text>Кажется, после этой обновки снаряжение стало потяжелей</text>
+        <text>Этот торговец хорошенько начистил мою снарягу</text>
     </action>
 </texts>

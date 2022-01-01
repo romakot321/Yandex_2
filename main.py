@@ -13,18 +13,23 @@ class HeroInfoMenu:
         self.button1 = ('Назад', pygame.rect.Rect(10, HEIGHT - 50, 300, 40), StartMenu.show)
         self.buttons = [self.button1]
 
-    def draw(self, screen: pygame.Surface):
+    def draw(self, screen: pygame.Surface, mouse_pos):
         screen.fill((61, 61, 61))
         f = pygame.font.Font(pygame.font.match_font('arial'), 70)
-        screen.blit(f.render("Герой", True, BLACK), (300, 10))
+        screen.blit(f.render("Герой", True, BLACK), (300, 5))
         q: Quest = Hero.hero_object.profile.get('main quest')
         screen.blit(self.font.render(f"Цель жизни: {q.text()} ({q.progress(Hero.hero_object)}%)", True, BLACK),
                     (10, 85))
         screen.blit(self.font.render(f"Характер: {Hero.hero_object.profile['hero character']}", True, BLACK),
-                    (10, 110))
+                    (10, 115))
+        screen.blit(self.font.render("Наклонности:", True, BLACK),
+                    (10, 145))
+        for i, t in enumerate(Hero.hero_object.profile['tendencies']):
+            screen.blit(self.font.render(t.text(), True, BLACK),
+                        (50, 175 + 25 * i))
         for text, rect, _ in self.buttons:
             s = pygame.Surface((rect.width, rect.height))
-            s.fill(GRAY)
+            s.fill(DARK_GRAY if rect.collidepoint(*mouse_pos) else GRAY)
             screen.blit(s, rect.topleft)
             screen.blit(self.font.render(text, True, WHITE),
                         (rect.centerx - len(text) * 6, rect.top + rect.height // 6))
@@ -48,38 +53,52 @@ class StartMenu:
         self.button2 = ('Герой', pygame.rect.Rect(WIDTH // 2 - 150, 200, 300, 40), HeroInfoMenu.show)
         self.button3 = ('Помощь', pygame.rect.Rect(WIDTH // 2 - 150, 250, 300, 40), self.showHelpText)
         self.buttons = [self.button1, self.button2, self.button3]
+        self.all_buttons = [self.button1, self.button2, self.button3]
 
-        self.text = ''
+        self.text = []
+        self.curr_text = 0
 
     def start_button(self):
         global draw_menu
         draw_menu = None
 
     def showHelpText(self):
-        self.text = help_text
+        self.text = [pygame.image.load('images/help1.png'),
+                     pygame.image.load('images/help2.png'),
+                     pygame.image.load('images/help3.png'),
+                     pygame.image.load('images/help4.png')]
+    def nextText(self):
+        self.curr_text += 1
+    def prevText(self):
+        self.curr_text -= 1
+    def toMenu(self):
+        self.text = []
 
-    def draw(self, screen: pygame.Surface):
+    def draw(self, screen: pygame.Surface, mouse_pos):
         screen.fill((61, 61, 61))
         f = pygame.font.Font(pygame.font.match_font('arial'), 70)
         screen.blit(f.render("RANDOM GAME", True, BLACK), (132, 20))
+        buttons = self.buttons
+
         if self.text:
-            y = 10
-            for s in self.text.split('\n'):
-                screen.blit(self.font.render(s, True, WHITE),
-                            (10, y))
-                y += 30
             buttons = []
-        else:
-            buttons = self.buttons
+            screen.blit(self.text[self.curr_text], (0, 0))
+            if self.curr_text == 0:
+                buttons.append(('В меню', pygame.rect.Rect(10, HEIGHT - 60, 300, 40), self.toMenu))
+            if self.curr_text > 0:
+                buttons.append(('Назад', pygame.rect.Rect(10, HEIGHT - 60, 300, 40), self.prevText))
+            if self.curr_text < len(self.text) - 1:
+                buttons.append(('Далее', pygame.rect.Rect(WIDTH - 320, HEIGHT - 60, 300, 40), self.nextText))
+            self.all_buttons = self.buttons + buttons
         for text, rect, _ in buttons:
             s = pygame.Surface((rect.width, rect.height))
-            s.fill(GRAY)
+            s.fill(DARK_GRAY if rect.collidepoint(*mouse_pos) else GRAY)
             screen.blit(s, rect.topleft)
             screen.blit(self.font.render(text, True, WHITE),
                         (rect.centerx - len(text) * 6, rect.top + rect.height // 6))
 
     def on_click(self, pos):
-        for _, rect, func in self.buttons:
+        for _, rect, func in self.all_buttons:
             if rect.collidepoint(*pos):
                 func()
 
@@ -111,12 +130,21 @@ class App:
         self.init()
 
     def init(self):
-        for locname, params in locations_list.items():
-            params['app'] = self
-            Location(locname, **params)
-        self.hero = Hero()
+        for locname, p in locations_list.items():
+            params = Handler.get_locations_params(locname)
+            if params:
+                params['app'] = self
+                Location(**params)
+            else:
+                p['app'] = self
+                Location(locname, **p)
+        h = Handler.get_hero()
+        if h:
+            self.hero = h
+            Hero.hero_object = self.hero
+        else:
+            self.hero = Hero()
         Hero.app = self
-        self.hero.inventory('hands', Item.getItem('булава'))
         self.all_sprites.add(self.hero)
 
     def run(self):
@@ -133,7 +161,7 @@ class App:
 
             # Обновление
             if draw_menu:  # Рендер меню
-                draw_menu.draw(self.screen)
+                draw_menu.draw(self.screen, pygame.mouse.get_pos())
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         running = False
@@ -172,8 +200,8 @@ class App:
                                 strc.inventory.clear()
                 for chrt in curr_loc.characters:  # Проверка на коллизию с персонажами
                     if pygame.rect.Rect(*(chrt.rect.topleft - self.hero.velocity
-                                        + (0, 25)), 40, 40).collidepoint(self.hero.rect.x,
-                                                                        self.hero.rect.y):
+                                          + (0, 25)), 40, 40).collidepoint(self.hero.rect.x,
+                                                                           self.hero.rect.y):
                         if isinstance(chrt, Enemy) and self.hero.curr_fight is None \
                                 and chrt.curr_fight is None:  # С врагом
                             self.hero.curr_fight = Fight(self.hero, chrt)
@@ -232,6 +260,9 @@ class App:
                     self.hero.curr_fight.lasttime = datetime.datetime.now()
                     show_text = self.hero.curr_fight.next()
             self.render(show_text)
+        Handler.save_hero(self.hero)
+        for loc in Location.locations_objects:
+            Handler.save_locations_params(**loc.__dict__)
         pygame.quit()
 
     def render(self, show_text=''):
@@ -318,7 +349,7 @@ class App:
             for q in self.hero.quests:
                 i += 1
                 self.screen.blit(self.normal_font.render(f'{q.name}) {q.target} ({q.progress(self.hero)}%)',
-                                                  True, FONT_TEXT), (0, (i + 1) * 22))
+                                                         True, FONT_TEXT), (0, (i + 1) * 22))
             self.hero.inventory.draw(self.screen)
         mouse_x, mouse_y = pygame.mouse.get_pos()
         for chrt in curr_loc.characters:
@@ -327,7 +358,7 @@ class App:
                 rect = pygame.rect.Rect(*(chrt.rect.topleft - self.hero.velocity + (0, 25)), 40, 40)
                 if rect.collidepoint(mouse_x, mouse_y):
                     self.screen.blit(self.small_font.render(str(chrt), True, GRAY),
-                                (rect.left, rect.top - BLOCK_SIZE + 25))
+                                     (rect.left, rect.top - BLOCK_SIZE + 25))
         if show_text:
             if isinstance(show_text, str):  # отображение по центру
                 y = HEIGHT // 2

@@ -1,3 +1,4 @@
+import config
 from DBHandler import Handler
 import pygame
 from config import *
@@ -16,16 +17,19 @@ class Location:
 
     def __init__(self, name, minx=0, miny=0, maxx=0, maxy=0,
                  basic_blocks_spritename=(DARK_GREEN, FOREST_GREEN),
-                 structures=None, cities=None, app=None):
+                 structures=None, cities=None, **params):
         if Handler.get_locations_params(name) is not None:  # Если такая локация существует...
-            for param_name, val in Handler.get_locations_params(name):
+            for param_name, val in Handler.get_locations_params(name).items():
                 self.__dict__[param_name] = val
+            for c in self.characters:
+                c.loc = self
+                c.app = params['app']
         else:
             self.maxx, self.maxy = maxx, maxy
             self.minx, self.miny = minx, miny
             self.name = name
             self.characters: List[Union['Hero', 'Enemy', 'NPC']] = []
-            self.structures_list = []
+            self.structures_list = pygame.sprite.Group()
             self.blocks_sprites = pygame.sprite.Group()
             sminx, sminy = minx, miny
             if minx < 0:
@@ -36,13 +40,12 @@ class Location:
                 for name, count in structures.items():
                     for _ in range(count):
                         x, y = randrange(sminx, maxx, 50), randrange(sminy, maxy, 50)
-                        self.structures_list.append(Structure(x, y, name, name,
+                        self.structures_list.add(Structure(x, y, name, name,
                                                               structure_items_list.get(name, None)))
                         if structures_list[name].get('npcs') is not None:
                             for _ in range(structures_list[name]['npcs']):
-                                npc = [i for i in npcs_list.keys() if npcs_list[i]['loc_name'] == self.name]
-                                npc = choice(npc)
-                                self.characters.append(NPC(x, y, npc, self, app, self.structures_list[-1],
+                                npc = choice([i for i in npcs_list.keys() if npcs_list[i]['loc_name'] == self.name])
+                                self.characters.append(NPC(x, y, npc, self, params['app'], self.structures_list.sprites()[-1],
                                                            npcs_list[npc].get('image_name', None)))
                                 self.characters[-1].sell_items = npcs_list[npc].get('sell_items', [])
                                 self.characters[-1].quests = npcs_list[npc].get('quests', []).copy()
@@ -52,7 +55,14 @@ class Location:
             if cities:
                 for name in cities:
                     x, y = randrange(sminx, maxx, 50), randrange(sminy, maxy, 50)
-                    self.structures_list.append(City(x, y, name))
+                    self.structures_list.add(City(x, y, name))
+                city = choice(cities)
+                s = [s for s in self.structures_list if s.name == city][0]
+                npc = 'Трейдер'
+                self.characters.append(NPC(s.x, s.y, npc, self, params['app'], s,
+                                           npcs_list[npc].get('image_name', None)))
+                self.characters[-1].sell_items = npcs_list[npc].get('sell_items', [])
+
             for y in range(miny, maxy, BLOCK_SIZE):
                 for x in range(minx, maxx, BLOCK_SIZE):
                     if (x, y) in [(s.x, s.y) for s in self.structures_list]:
@@ -140,42 +150,12 @@ class Location:
 
 
 class Block(pygame.sprite.Sprite):
-    images = {
-        'house': [(3, pygame.image.load('sprites/structure1.png').convert())],
-        'holy ruins': [(3, pygame.image.load('sprites/structure1.png').convert())],
-        'ruins': [(3, pygame.image.load('sprites/sand_structure.png').convert())],
-        'grass': [
-            (3, pygame.image.load('sprites/grass1.png').convert()),
-            (3, pygame.image.load('sprites/grass2.png').convert()),
-            (3, pygame.image.load('sprites/grass3.png').convert()),
-            (2, pygame.image.load('sprites/grass_blue.png').convert()),
-            (2, pygame.image.load('sprites/grass_yellow.png').convert()),
-            (0.1, pygame.image.load('sprites/grass_rock.png').convert())
-        ],
-        'mountain': [
-            (3, pygame.image.load('sprites/mountain1.png').convert()),
-            (3, pygame.image.load('sprites/mountain2.png').convert()),
-            (3, pygame.image.load('sprites/mountain3.png').convert()),
-            (0.1, pygame.image.load('sprites/mountain_rock1.png').convert()),
-            (0.1, pygame.image.load('sprites/mountain_rock2.png').convert())
-        ],
-        'sand': [
-            (1, pygame.image.load('sprites/sand1.png').convert()),
-            (3, pygame.image.load('sprites/sand2.png').convert()),
-            (3, pygame.image.load('sprites/sand3.png').convert()),
-            (0.07, pygame.image.load('sprites/sand_cactus1.png').convert()),
-            (0.06, pygame.image.load('sprites/sand_cactus2.png').convert())
-        ]
-    }
-    basic_image = pygame.Surface((BLOCK_SIZE, BLOCK_SIZE))
-    basic_image.fill(RED)
-
     def __init__(self, x, y, colors=(), image_name=None):
         pygame.sprite.Sprite.__init__(self)
         self._image_name = image_name
         try:
-            self.im_index = choices(range(0, len(Block.images[image_name])),
-                                    weights=[w for w, _ in Block.images[image_name]])[0] \
+            self.im_index = choices(range(0, len(config.images[image_name])),
+                                    weights=[w for w, _ in config.images[image_name]])[0] \
                 if image_name else None
         except KeyError:
             self._image_name = None
@@ -190,8 +170,8 @@ class Block(pygame.sprite.Sprite):
     @image.getter
     def image(self):
         if self._image_name is None:
-            return Block.basic_image
-        return Block.images[self._image_name][self.im_index][1]
+            return config.basic_image
+        return config.images[self._image_name][self.im_index][1]
 
 
 class Structure(Block):

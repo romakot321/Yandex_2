@@ -3,6 +3,8 @@ import datetime
 import random
 from typing import List, Union
 
+import pygame
+
 from item import Item
 from DBHandler import Handler
 
@@ -135,12 +137,12 @@ class Fight:
         a_stats = self.attacker.getFightStats()
         t_stats = self.target.getFightStats()
         if self.attacker_turn:
-            dmg = max([0, a_stats['damage'] - t_stats['armor']]) + random.randint(-int(0.5 * a_stats['damage']),
-                                                                                  int(0.5 * a_stats['damage']))
+            dmg = max([0, a_stats['damage'] - t_stats['armor'] + random.randint(-int(0.5 * a_stats['damage']),
+                                                                                int(0.5 * a_stats['damage']))])
             self.target.health -= dmg
         else:
-            dmg = max([0, t_stats['damage'] - a_stats['armor']]) + random.randint(-int(0.5 * t_stats['damage']),
-                                                                                  int(0.5 * t_stats['damage']))
+            dmg = max([0, t_stats['damage'] - a_stats['armor'] + random.randint(-int(0.5 * t_stats['damage']),
+                                                                                int(0.5 * t_stats['damage']))])
             self.attacker.health -= dmg
 
         return dmg
@@ -164,6 +166,18 @@ class Fight:
         :return: Позицию и текст для рендера
         """
         dmg = self._turn()
+        if 0.3 < round(random.random(), 1) < 0.5:
+            if self.attacker.name == 'Герой' and self.attacker.health < 30:
+                self.target.onDeath(None)
+                self.target.onDeath(None)
+                self.attacker.curr_fight = None
+                self.target.curr_fight = None
+            elif self.target.name == 'Герой' and self.target.health < 30:
+                self.attacker.onDeath(None)
+                self.attacker.onDeath(None)
+                self.attacker.curr_fight = None
+                self.target.curr_fight = None
+
         if self.attacker.health < 1:
             self._end()
             self.attacker.onDeath(self.target)
@@ -209,6 +223,25 @@ class Dialog:
             return x, y, t
 
 
+class Tendency:
+    def __init__(self, name, typ: str, info: str):
+        self.name = name
+        self.type = typ
+        if self.type == 'funcs':
+            info = info.split()
+            self.info = (info[0], float(info[1]))
+        elif self.type == 'decision':
+            info = info.split()
+            if info[0] == 'like_item':
+                self.info = (info[0],)
+
+    def text(self):
+        if self.type == 'decision':
+            if self.info[0] == 'like_item':
+                return self.name + ' ' + self.info[1].name
+        return self.name
+
+
 # --- Данные
 locations_list: dict = {
     'болото': {
@@ -218,7 +251,7 @@ locations_list: dict = {
         'maxy': HEIGHT * 10,
         'basic_blocks_spritename': 'grass',
         'structures': {
-            'House': 20
+            'House': 10
         },
         'cities': [
             'Middletown'
@@ -243,7 +276,7 @@ locations_list: dict = {
         'basic_blocks_spritename': 'sand',
         'structures': {
             'Ruins': 30,
-            'Sand house': 10
+            'Sand house': 20
         },
         'cities': ["Первый поселок", "Вторчинск", "Третьяковка"]
     }
@@ -300,7 +333,7 @@ structure_items_list = {
 }  # Вид (weight(для random.choices), Item)
 
 npcs_list = {
-    'trader': {
+    'Торговец': {
         'loc_name': 'болото',
         'sell_items': [
             Item.getItem('Кожаная куртка'),
@@ -320,7 +353,7 @@ npcs_list = {
         ],
         'image_name': 'sprites/npc.png'
     },
-    'quester': {
+    'Работодатель': {
         'loc_name': 'болото',
         'quests': [
             'А',
@@ -328,6 +361,20 @@ npcs_list = {
             'Продать'
         ],
         'image_name': 'sprites/npc.png'
+    },
+    'Оружейник': {
+        'loc_name': 'болото',
+        'sell_items': [Item.getItem('улучшение')],
+        'image_name': 'sprites/npc.png'
+    },
+    'Трейдер': {
+        'loc_name': 'пустыня',
+        'sell_items': [
+            Item.getItem('улучшение'),
+            Item.getItem('заклятая кольчуга'),
+            Item.getItem('глубинный меч')
+        ],
+        'image_name': 'sprites/epic_npc.png'
     }
 }
 enemy_list = {
@@ -366,6 +413,35 @@ enemy_list = {
     }
 }
 
-help_text = '''
+pygame.display.init()
+pygame.display.set_mode((WIDTH, HEIGHT))
 
-'''  # TODO Заполнить текст помощи
+images = {
+    'house': [(3, pygame.image.load('sprites/structure1.png').convert())],
+    'holy ruins': [(3, pygame.image.load('sprites/structure1.png').convert())],
+    'ruins': [(3, pygame.image.load('sprites/sand_structure.png').convert())],
+    'grass': [
+        (3, pygame.image.load('sprites/grass1.png').convert()),
+        (3, pygame.image.load('sprites/grass2.png').convert()),
+        (3, pygame.image.load('sprites/grass3.png').convert()),
+        (2, pygame.image.load('sprites/grass_blue.png').convert()),
+        (2, pygame.image.load('sprites/grass_yellow.png').convert()),
+        (0.1, pygame.image.load('sprites/grass_rock.png').convert())
+    ],
+    'mountain': [
+        (3, pygame.image.load('sprites/mountain1.png').convert()),
+        (3, pygame.image.load('sprites/mountain2.png').convert()),
+        (3, pygame.image.load('sprites/mountain3.png').convert()),
+        (0.1, pygame.image.load('sprites/mountain_rock1.png').convert()),
+        (0.1, pygame.image.load('sprites/mountain_rock2.png').convert())
+    ],
+    'sand': [
+        (1, pygame.image.load('sprites/sand1.png').convert()),
+        (3, pygame.image.load('sprites/sand2.png').convert()),
+        (3, pygame.image.load('sprites/sand3.png').convert()),
+        (0.07, pygame.image.load('sprites/sand_cactus1.png').convert()),
+        (0.06, pygame.image.load('sprites/sand_cactus2.png').convert())
+    ]
+}
+basic_image = pygame.Surface((BLOCK_SIZE, BLOCK_SIZE))
+basic_image.fill(RED)

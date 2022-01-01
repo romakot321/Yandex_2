@@ -41,13 +41,30 @@ class Character(pygame.sprite.Sprite):
     def onWorldPos(self) -> tuple:
         return tuple(self.rect.center)
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        surface = state.pop("image")
+        if 'app' in state:
+            state.pop('app')
+        if 'loc' in state:
+            state['loc_name'] = state.pop('loc').name
+        state["image_string"] = (pygame.image.tostring(surface, "RGB"), surface.get_size())
+        return state
+
+    def __setstate__(self, state):
+        surface_string, size = state.pop("image_string")
+        state["image"] = pygame.image.fromstring(surface_string, size, "RGB")
+        state['image'].set_colorkey(WHITE)
+        self.__dict__.update(state)
+
     def __str__(self):
         return f'{self.health}'
 
 
 class Hero(Character):
     ACTIONS = ((1, complete_quest), (2, loot_nearest_structure),
-               (1, hero_buy_equipment), (0.5, to_nearest_enemy))  # кортеж действий, хранящий функции(из config)
+               (1, hero_buy_equipment), (0.5, to_nearest_enemy),
+               (0, to_nearest_city))  # кортеж действий, хранящий функции(из config)
     # TODO Продать вещи
     SUBACTIONS = (hero_sell_items, to_nearest_enemy)
     hero_object: 'Hero' = None
@@ -86,31 +103,77 @@ class Hero(Character):
         self.journal = []
         self.profile = {}
         self.init_profile()
+        Handler.save_hero(self)
 
     def init_profile(self):
-        self.profile['main quest'] = Handler.get_quest(None, is_main_quest=True)
         self.profile['good level'] = round(random.uniform(-0.5, 0.5), 2)
         characters = [([x / 100.0 for x in range(-50, -30)], 'абсолютно злой'),
                       ([x / 100.0 for x in range(-30, -5)], 'агрессивный'),
                       ([x / 100.0 for x in range(-5, 5)], 'нормальный'),
                       ([x / 100.0 for x in range(5, 30)], 'добродушный'),
                       ([x / 100.0 for x in range(30, 50)], 'абсолютно добрый')]
+        kits = {
+            'абсолютно злой': [
+                Item.getItem('кожаная куртка'),
+                Item.getItem('именнованный кинжал'),
+                Item.getItem('ботинки'),
+                Item.getItem('юбка'),
+                Item.getItem('цилиндр'),
+                Item.getItem('книга')
+            ],
+            'абсолютно добрый': [
+                Item.getItem('белый педжак'),
+                Item.getItem('белые брюки'),
+                Item.getItem('очки без линз'),
+                Item.getItem('лакированные туфли'),
+                Item.getItem('молот'),
+                Item.getItem('книга')
+            ],
+            'default': [
+                Item.getItem("штаны"),
+                Item.getItem("топорик"),
+                Item.getItem('книга')
+            ]
+        }
         self.profile['hero character'] = [j for i, j in characters if self.profile['good level'] in i][0]
+        while True:
+            q = Handler.get_quest(None, is_main_quest=True)
+            if hero_need_quest(self, q):
+                break
+        self.profile['main quest'] = q
+        self.equipment.clear()
+        self.inventory.clear()
+        self.inventory.append(kits.get(self.profile['hero character'], kits['default']))
+
+        tendencies = Handler.get_tendencies()
+        self.profile['tendencies'] = []
+        for _ in range(randint(1, 2)):
+            name, info = choice(list(tendencies.items()))
+            if name not in [i.name for i in self.profile['tendencies']]:
+                self.profile['tendencies'].append(Tendency(name, **info))
+            if self.profile['tendencies'][-1].info[0] == 'like_item':
+                self.profile['tendencies'][-1].info = ('like_item',
+                                                       choice(self.inventory.itemsList(without_none=True)))
+
         acts = copy(Hero.ACTIONS)
         Hero.ACTIONS = []
         for w, act in acts:
             if act == to_nearest_enemy:
                 if self.profile['hero character'] == 'абсолютно злой':
-                    Hero.ACTIONS.append((1.5, to_nearest_enemy))
+                    w = 1.5
                 elif self.profile['hero character'] == 'абсолютно добрый':
-                    Hero.ACTIONS.append((0.1, to_nearest_enemy))
+                    w = 0.1
             elif act == loot_nearest_structure:
                 if self.profile['hero character'] == 'абсолютно злой':
-                    Hero.ACTIONS.append((w + 0.2, loot_nearest_structure))
+                    w += 0.2
                 elif self.profile['hero character'] == 'абсолютно добрый':
-                    Hero.ACTIONS.append((w - 0.2, loot_nearest_structure))
-            else:
-                Hero.ACTIONS.append((w, act))
+                    w -= 0.2
+            if act.__name__ in [t.info[0] for t in self.profile['tendencies'] if t.type == 'funcs']:
+                w += [t.info[1] for t in self.profile['tendencies']
+                      if t.type == 'funcs' and t.info[0] == act.__name__][0]
+            Hero.ACTIONS.append((w, act))
+
+
 
     def update(self):
         if (datetime.now() - self.lasttime).microseconds > 800000 - 600000 * Hero.update_boost \
@@ -210,11 +273,20 @@ class Hero(Character):
         self.rect.center = (WIDTH // 2, HEIGHT // 2)
         self.death_count += 1
         self.health = 100
+        self.inventory.clear()
+        self.move_to = None
+        self.queue_move_to = []
 
     def onSellItem(self, item):
         for q in self.quests:
             if q.target.typ == 'sell' and q.target.obj == item:
                 q.target.sell_count += 1
+
+    def onBuyItem(self, item):
+        if item.name == 'улучшение':
+            choice(self.equipment.itemsList(without_none=True)).upgrade()
+            self.inventory.clear(Item.getItem('улучшение'))
+            self.onAction('item upgrade')
 
     def onAction(self, action_name):
         phrases = Handler.get_journalphrase(action_name)
@@ -235,7 +307,6 @@ class NPC(Character):
         :param app: class App from main.py
         :param structure: Прикрепление к структуре(необяз)
         """
-        # TODO Эпический НПС(торговец, продает эпические предметы, есть только в городе)
         Character.__init__(self, x, y, image_name=image_name)
         self.loc = loc
         self.app = app
@@ -307,17 +378,27 @@ class NPC(Character):
                         item.price = price
                         Hero.hero_object.inventory.append([item])
                         Hero.hero_object.coins -= price
+                        Hero.hero_object.onBuyItem(item)
                         text.append('Согласен!')
                     else:
                         text.append('У меня нет на это денег.')
                 else:
                     text.append('Не')
+                    i = Handler.get_dialog(f'trade_{trade}')
+                    params = {}
+                    for p in i[3].split(','):
+                        if p.strip() == 'item_name':
+                            params['item_name'] = item.name
+                        elif p.strip() == 'item_price':
+                            params['item_price'] = price
+                    text = [i[2].format(**params)]
                     item = choice([i for i in self.sell_items if i.type == 'equipment'])
                     if hero_need_item_buy(Hero.hero_object, item):
                         if Hero.hero_object.coins >= price:
                             item.price = price
                             Hero.hero_object.inventory.append([item])
                             Hero.hero_object.coins -= price
+                            Hero.hero_object.onBuyItem(item)
                             text.append('Согласен!')
                         else:
                             text.append('У меня нет на это денег.')
@@ -415,7 +496,7 @@ class Enemy(Character):
         del self
 
     def update(self):
-        if (datetime.now() - self.lasttime).microseconds > 750000 - 650000 * Hero.update_boost \
+        if (datetime.now() - self.lasttime).microseconds > 600000 - 500000 * Hero.update_boost \
                 and self.curr_fight is None:
             self.lasttime = datetime.now()
             choice(self.ACTIONS)(self.rect, self.move_to.onWorldPos(),
