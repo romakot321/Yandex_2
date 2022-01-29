@@ -77,7 +77,7 @@ class StartMenu:
     def draw(self, screen: pygame.Surface, mouse_pos):
         screen.fill((61, 61, 61))
         f = pygame.font.Font(pygame.font.match_font('arial'), 70)
-        screen.blit(f.render("RANDOM GAME", True, BLACK), (132, 20))
+        screen.blit(f.render("DIVINE ADVISOR", True, BLACK), (132, 20))
         buttons = self.buttons
 
         if self.text:
@@ -131,7 +131,7 @@ class App:
 
     def init(self):
         for locname, p in locations_list.items():
-            params = Handler.get_locations_params(locname)
+            params = Handler.get_location_params(locname)
             if params:
                 params['app'] = self
                 Location(**params)
@@ -140,7 +140,7 @@ class App:
                 Location(locname, **p)
         h = Handler.get_hero()
         if h:
-            self.hero = h
+            self.hero: 'Hero' = h
             Hero.hero_object = self.hero
         else:
             self.hero = Hero()
@@ -191,9 +191,13 @@ class App:
             if curr_loc:  # TODO Иначе если вышли за карту?
                 for strc in curr_loc.structures_list:  # Проверка на коллизию со структурами
                     if strc.rect.collidepoint(*self.hero.onWorldPos()):
-                        # Прибавление т.к. нулевые координаты у камеры смещены
-                        if isinstance(strc, City):
-                            self.hero.in_city = True
+                        if isinstance(strc, City) and self.hero.in_city is False and not self.hero.timer:
+                            self.hero.in_city = choices([True, 2],
+                                                        (1, 0.2 + 0.4 * self.hero.hasTendency('выпивать')))[0]
+                            if self.hero.in_city == 2:  # Если герой решил выпить
+                                self.hero.onAction('drink')
+                                self.hero.coins -= self.hero.coins // 100 * randint(5, 50)
+                                self.hero.timer = (datetime.datetime.now(), 30)
                         else:
                             if strc.inventory == True:  # Не изменять, особенности ООП:)
                                 self.hero.inventory.append(strc.inventory)
@@ -214,7 +218,8 @@ class App:
                 elif event.type == pygame.KEYDOWN:
                     if self.enter_action is not None:
                         if event.key == pygame.K_RETURN:
-                            do_action(self.enter_action, self.hero)
+                            if do_action(self.enter_action, self.hero) is False:
+                                self.hero.onAction('not do action')
                             self.enter_action = None
                         elif event.key == pygame.K_BACKSPACE:
                             self.enter_action = self.enter_action[:-1]
@@ -246,7 +251,7 @@ class App:
                     for chrt in curr_loc.characters:
                         if chrt.rect.topleft[0] - self.hero.velocity[0] in range(0, WIDTH + 1) \
                                 and chrt.rect.topleft[1] - self.hero.velocity[1] + 25 in range(0, HEIGHT + 1):
-                            rect = pygame.rect.Rect(*(chrt.rect.topleft - self.hero.velocity + (0, 25)), 40, 40)
+                            rect = pygame.rect.Rect(*(chrt.rect.topleft - self.hero.velocity + (-40, -15)), 80, 80)
                             if rect.collidepoint(mouse_x, mouse_y):
                                 show_text = chrt.fullDescription()
                                 lasttime_showtext = datetime.datetime.now()
@@ -262,7 +267,7 @@ class App:
             self.render(show_text)
         Handler.save_hero(self.hero)
         for loc in Location.locations_objects:
-            Handler.save_locations_params(**loc.__dict__)
+            Handler.save_location_params(**loc.__dict__)
         pygame.quit()
 
     def render(self, show_text=''):
@@ -369,9 +374,13 @@ class App:
             elif isinstance(show_text, tuple):  # Отображение по show_text[0, 1]
                 self.screen.blit(self.small_font.render(show_text[2], True, RED),
                                  (show_text[0], show_text[1]))
-        if self.enter_action is not None:
+        if self.enter_action is not None:  # Отображение вводимого действия
             self.screen.blit(self.font.render(self.enter_action, True, FONT_TEXT),
                              (50, HEIGHT - BLOCK_SIZE))
+        else:  # Отображение прогресса восстановление силы на отдавание приказа
+            recover_progress = pygame.Surface((WIDTH // 100 * self.hero.recover_setaction_progress, 5))
+            recover_progress.fill((0, 0, 50))
+            self.screen.blit(recover_progress, (0, HEIGHT - 5))
 
         pygame.display.flip()
 

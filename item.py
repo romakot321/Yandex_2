@@ -123,7 +123,7 @@ class Inventory:
             for i in self.itemsList(without_none=True):
                 if i.price in range(0, 6) and i not in q_items:
                     t.append(i)
-            if 'move_to' in self.owner.__dict__ and self.full():
+            if self.owner.name == 'Герой' and self.full():
                 self.owner.SUBACTIONS[0](self.owner)
         for s in self.slots:
             if item:
@@ -226,6 +226,9 @@ class Item:
     def getItem(item_name):
         a = Handler.get_items(item_name=item_name)
         return a[0] if a else None
+
+    def __getstate__(self):
+        return self.__dict__.copy()
 
     def __getattr__(self, item):
         if self.__dict__:

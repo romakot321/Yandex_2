@@ -1,5 +1,5 @@
 import pygame
-from random import randrange, choices
+from random import randrange, choices, random
 
 from config import BLOCK_SIZE, WIDTH, HEIGHT
 
@@ -18,24 +18,39 @@ def do_action(string: str, hero):
             break
         else:
             act = None
-    if act == 'loot_structure':
-        loot_nearest_structure(hero)
-    elif act == 'get_quest':
-        get_quest(hero)
-    elif act == 'complete_quest':
-        complete_quest(hero)
-    elif act == 'faster':
+    if act == 'faster':
         Hero.update_boost = 1
+        return True
     elif act == 'slower':
         Hero.update_boost = 0
-    elif act == 'buy equipment':
-        hero_buy_equipment(hero)
-    elif act == 'sell items':
-        hero_sell_items(hero)
-    elif act == 'move to city':
-        to_nearest_city(hero)
-    elif act == 'move random':
-        random_point(hero)
+        return True
+    if hero.recover_setaction_progress == 100:
+        # Герой может отказаться
+        if choices([True, False], (hero.profile['set_action_chance'], 1 - hero.profile['set_action_chance']))[0]:
+            if act == 'loot_structure':
+                hero.recover_setaction_progress = 0
+                return loot_nearest_structure(hero)
+            elif act == 'get_quest':
+                hero.recover_setaction_progress = 0
+                return get_quest(hero)
+            elif act == 'complete_quest':
+                hero.recover_setaction_progress = 0
+                return complete_quest(hero)
+            elif act == 'buy equipment':
+                hero.recover_setaction_progress = 0
+                return hero_buy_equipment(hero)
+            elif act == 'sell items':
+                hero.recover_setaction_progress = 0
+                return hero_sell_items(hero)
+            elif act == 'move to city':
+                hero.recover_setaction_progress = 0
+                return to_nearest_city(hero)
+            elif act == 'move random':
+                hero.recover_setaction_progress = 0
+                return random_point(hero)
+        else:
+            hero.recover_setaction_progress = 0
+            return False
 
 
 # --- Передвижение
@@ -96,11 +111,12 @@ def right(velocity, rect, mincoords=(0, 0), maxcoords=(WIDTH * 20, HEIGHT * 20))
             rect.centerx += BLOCK_SIZE
 
 
-def random_point(hero):
+def random_point(hero) -> bool:
     hero.move_to = pygame.math.Vector2(randrange(0, WIDTH * 19, 50),
                                        randrange(0, HEIGHT * 19, 50))
     hero.task = 'moving'
     hero.onAction('move random')
+    return True
 
 
 def to_nearest_enemy(hero, enemy_name=None):
@@ -174,7 +190,7 @@ def hero_need_quest(hero, quest) -> bool:
     return choices([False, True], weights=[w_no, w_yes])[0]
 
 
-def complete_quest(hero, q=None):
+def complete_quest(hero, q=None) -> bool:
     if hero.quests or q:
         if q is None:
             q = hero.quests[0]
@@ -281,7 +297,7 @@ def hero_need_item_sell(hero, item):
     return f
 
 
-def hero_sell_items(hero):
+def hero_sell_items(hero) -> bool:
     min_pos = (9999999, None)
     for chrt in hero._curr_loc.characters:
         if 'quests' in chrt.__dict__:  # if chrt is NPC
@@ -296,6 +312,8 @@ def hero_sell_items(hero):
         hero.move_to = min_pos[1]
         hero.task = 'trade sell'
         hero.onAction('move trade sell')
+        return True
+    return False
 
 
 def hero_buy_equipment(hero):

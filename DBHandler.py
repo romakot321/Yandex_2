@@ -12,19 +12,19 @@ class Handler:
 
     @staticmethod
     def save_hero(hero):
-        with open(f'save_hero', 'wb+') as f:
+        with open('save_hero', 'wb+') as f:
             dump(hero, f)
 
     @staticmethod
     def get_hero():
         try:
-            with open(f'save_hero', 'rb') as f:
+            with open('save_hero', 'rb') as f:
                 return load(f)
         except FileNotFoundError:
             return None
 
     @staticmethod
-    def get_locations_params(loc_name) -> dict:
+    def get_location_params(loc_name) -> dict:
         try:
             with open(f'save_{loc_name}', 'rb') as f:
                 return load(f)
@@ -34,7 +34,7 @@ class Handler:
             return None
 
     @staticmethod
-    def save_locations_params(**params: Dict[str, Any]):
+    def save_location_params(**params: Dict[str, Any]):
         """
         :param params: {(param_name: param_value)}
         """

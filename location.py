@@ -18,8 +18,8 @@ class Location:
     def __init__(self, name, minx=0, miny=0, maxx=0, maxy=0,
                  basic_blocks_spritename=(DARK_GREEN, FOREST_GREEN),
                  structures=None, cities=None, **params):
-        if Handler.get_locations_params(name) is not None:  # Если такая локация существует...
-            for param_name, val in Handler.get_locations_params(name).items():
+        if Handler.get_location_params(name) is not None:  # Если такая локация существует...
+            for param_name, val in Handler.get_location_params(name).items():
                 self.__dict__[param_name] = val
             for c in self.characters:
                 c.loc = self
@@ -71,7 +71,7 @@ class Location:
                         continue
                     else:
                         self.blocks_sprites.add(Block(x, y, image_name=basic_blocks_spritename))
-            Handler.save_locations_params(**self.__dict__)
+            Handler.save_location_params(**self.__dict__)
         Location.locations_objects.append(self)
 
     @staticmethod

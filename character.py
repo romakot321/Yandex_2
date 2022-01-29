@@ -3,7 +3,7 @@ from copy import copy
 from config import *
 import pygame
 from datetime import datetime
-from random import choice, randint
+from random import choice, randint, uniform
 from item import Inventory
 from typing import Tuple, List, Set, Union
 from DBHandler import Handler
@@ -33,7 +33,8 @@ class Character(pygame.sprite.Sprite):
     def fullDescription(self):
         return f'{self.health}'
 
-    def getFightStats(self): pass
+    def getFightStats(self):
+        pass
 
     def onWindowPos(self):
         return self.rect.topleft - Hero.hero_object.velocity + (0, 25)
@@ -76,6 +77,7 @@ class Hero(Character):
 
         :param velocity: Param for camera
         :param is_moving: Может ли герой идти
+        :param timer: Счетчик времени для разных событий. Вид: (datetime.datetime, need_seconds)
         """
         Character.__init__(self, WIDTH // 2, HEIGHT // 2, DARK_RED,
                            image_name='sprites/hero.png')
@@ -83,7 +85,7 @@ class Hero(Character):
         self.velocity = pygame.math.Vector2(0, 0)
         self.lasttime = datetime.now()
         self.is_moving = True
-        self.in_city = False
+        self.in_city: bool = False
         self.equipment = Inventory(self, 5, ('head', 'body', 'legs',
                                              'boots', 'hands'))
         self.inventory = Inventory(self, 9, linked_inv=self.equipment)
@@ -99,14 +101,17 @@ class Hero(Character):
         self.move_to = None
         self.queue_move_to = []
         self.task = ''
+        self.timer = None
 
         self.journal = []
-        self.profile = {}
+        self.profile = {"good_level": None, 'hero_character': None, 'main_quest': None, 'tendencies': [],
+                        'set_action_chance': 0.7}
+        self.recover_setaction_progress = 100  # Сила на отдавание приказа(работает только при 100)
         self.init_profile()
         Handler.save_hero(self)
 
     def init_profile(self):
-        self.profile['good level'] = round(random.uniform(-0.5, 0.5), 2)
+        self.profile['good level'] = round(uniform(-0.5, 0.5), 2)
         characters = [([x / 100.0 for x in range(-50, -30)], 'абсолютно злой'),
                       ([x / 100.0 for x in range(-30, -5)], 'агрессивный'),
                       ([x / 100.0 for x in range(-5, 5)], 'нормальный'),
@@ -147,7 +152,7 @@ class Hero(Character):
 
         tendencies = Handler.get_tendencies()
         self.profile['tendencies'] = []
-        for _ in range(randint(1, 2)):
+        for _ in range(randint(1, 2)):  # Выбор наклонностей
             name, info = choice(list(tendencies.items()))
             if name not in [i.name for i in self.profile['tendencies']]:
                 self.profile['tendencies'].append(Tendency(name, **info))
@@ -168,81 +173,89 @@ class Hero(Character):
                     w += 0.2
                 elif self.profile['hero character'] == 'абсолютно добрый':
                     w -= 0.2
+            # Коррекция весов по наклонностям героя
             if act.__name__ in [t.info[0] for t in self.profile['tendencies'] if t.type == 'funcs']:
                 w += [t.info[1] for t in self.profile['tendencies']
                       if t.type == 'funcs' and t.info[0] == act.__name__][0]
             Hero.ACTIONS.append((w, act))
 
-
-
     def update(self):
-        if (datetime.now() - self.lasttime).microseconds > 800000 - 600000 * Hero.update_boost \
-                and self.is_moving and self.curr_fight is None:
-            # Совершение случайного действия раз в 3 секунды
-            self.lasttime = datetime.now()
-            if self.in_city:
-                if self.health < 100:
-                    self.health += randint(5, 20)
-                    return
-            if self.move_to:
-                # TODO Следование по заданному алгоритмом пути
-                if isinstance(self.move_to, NPC):  # Проверка на нахождение рядом с целью(НПС)
-                    x, y = self.move_to.onWorldPos()
-                    # Если на расстоянии 3-ех блоков...
-                    if x in range(int(self.rect.centerx + self.velocity.x - 100),
-                                  int(self.rect.centerx + self.velocity.x + 100)) \
-                            and y in range(int(self.rect.centery + self.velocity.y - 100),
-                                           int(self.rect.centery + self.velocity.y + 100)):
-                        print(self.task)
-                        if self.task.lower() == 'pass quest':
-                            if self.quests[0].target.check_done(self):
-                                self.move_to.dialog(quest='pass')
-                                self.move_to = None
-                        elif self.task.lower() == 'get quest':
-                            if self.move_to.quests:
-                                self.move_to.dialog(quest='get')
+        if (datetime.now() - self.lasttime).total_seconds() > 0.8 - 0.6 * Hero.update_boost:
+            if self.is_moving and self.curr_fight is None:
+                # Совершение случайного действия раз в 0.8/0.2 секунды
+                if self.recover_setaction_progress < 100:
+                    self.recover_setaction_progress += 5
+                self.lasttime = datetime.now()
+                if self.in_city:
+                    if self.health < 100:
+                        self.health += randint(5, 20)
+                        return
+                    if self.timer:
+                        if not Hero.update_boost and (datetime.now() - self.timer[0]).total_seconds() > self.timer[1] \
+                                or Hero.update_boost and (datetime.now() - self.timer[0]).total_seconds() > \
+                                self.timer[1] / 4:
+                            self.timer = None
+                            self.in_city = False
+                        else:
+                            return
+                if self.move_to:
+                    if isinstance(self.move_to, NPC):  # Проверка на нахождение рядом с целью(НПС)
+                        x, y = self.move_to.onWorldPos()
+                        # Если на расстоянии 3-ех блоков...
+                        if x in range(int(self.rect.centerx + self.velocity.x - 100),
+                                      int(self.rect.centerx + self.velocity.x + 100)) \
+                                and y in range(int(self.rect.centery + self.velocity.y - 100),
+                                               int(self.rect.centery + self.velocity.y + 100)):
+                            print(self.task)
+                            if self.task.lower() == 'pass quest':
+                                if self.quests[0].target.check_done(self):
+                                    self.move_to.dialog(quest='pass')
+                                    self.move_to = None
+                            elif self.task.lower() == 'get quest':
+                                if self.move_to.quests:
+                                    self.move_to.dialog(quest='get')
+                                    self.task = ''
+                                    self.move_to = None
+                            elif self.task.lower() == 'trade sell':
                                 self.task = ''
+                                self.move_to.dialog(trade='sell collectable')
                                 self.move_to = None
-                        elif self.task.lower() == 'trade sell':
-                            self.task = ''
-                            self.move_to.dialog(trade='sell collectable')
-                            self.move_to = None
-                        elif self.task.lower() == 'trade buy':
-                            if self.move_to.sell_items:
-                                self.task = ''
-                                self.move_to.dialog(trade='buy equip')
-                                self.move_to = None
-                elif isinstance(self.move_to, Enemy):
-                    x, y = self.onWorldPos()
-                else:
-                    x, y = self.move_to.x, self.move_to.y
-                    if self.task == 'moving' and self.quests:
-                        complete_quest(self)
-                xx, yy = self.onWorldPos()
-                print(x, y, xx, yy)
-                if x > xx:
-                    right(self.velocity, self.rect)
-                elif x < xx:
-                    left(self.velocity, self.rect)
-                elif y < yy:
-                    up(self.velocity, self.rect)
-                elif y > yy:
-                    down(self.velocity, self.rect)
-                else:
-                    if isinstance(self.move_to, NPC) and self.task == 'pass quest':
-                        self.move_to.dialog(quest='pass')
-                    self.move_to = None
-            else:
-                if self.queue_move_to:
-                    self.move_to = self.queue_move_to.pop(0)
-                else:
-                    if self.health in range(1, 25):
-                        to_nearest_city(self)
-                    elif not choices([a for _, a in self.ACTIONS],
-                                     weights=[w for w, _ in self.ACTIONS])[0](self):
-                        if not choices([a for _, a in self.ACTIONS],
-                                       weights=[w for w, _ in self.ACTIONS])[0](self):
-                            random_point(self)
+                            elif self.task.lower() == 'trade buy':
+                                if self.move_to.sell_items:
+                                    self.task = ''
+                                    self.move_to.dialog(trade='buy equip')
+                                    self.move_to = None
+                    elif isinstance(self.move_to, Enemy):
+                        x, y = self.onWorldPos()
+                    else:
+                        x, y = self.move_to.x, self.move_to.y
+                        if self.task == 'moving' and self.quests:
+                            complete_quest(self)
+                    xx, yy = self.onWorldPos()
+                    print(x, y, xx, yy)
+                    if x > xx:
+                        right(self.velocity, self.rect)
+                    elif x < xx:
+                        left(self.velocity, self.rect)
+                    elif y < yy:
+                        up(self.velocity, self.rect)
+                    elif y > yy:
+                        down(self.velocity, self.rect)
+                    else:
+                        if isinstance(self.move_to, NPC) and self.task == 'pass quest':
+                            self.move_to.dialog(quest='pass')
+                        self.move_to = None
+                else:  # Иначе выбор действия
+                    if self.queue_move_to:
+                        self.move_to = self.queue_move_to.pop(0)
+                    else:
+                        if self.health in range(1, 25):
+                            to_nearest_city(self)
+                        elif not choices([a for _, a in self.ACTIONS],
+                                         weights=[w for w, _ in self.ACTIONS])[0](self):
+                            if not choices([a for _, a in self.ACTIONS],
+                                           weights=[w for w, _ in self.ACTIONS])[0](self):
+                                random_point(self)
 
     def add_velocity(self, value: tuple):
         self.velocity += value
@@ -295,6 +308,9 @@ class Hero(Character):
             if len(self.journal) > 5:
                 self.journal.pop(0)
 
+    def hasTendency(self, name: str) -> bool:
+        return name.lower() in [i.name for i in self.profile['tendencies']]
+
 
 class NPC(Character):
     ACTIONS = (up, left, right, down)
@@ -322,7 +338,7 @@ class NPC(Character):
         self.type = 'npc'
 
     def dialog(self, quest=None, trade=None):
-        """Получение текста диалога
+        """Проведение диалога. Здесь происходит покупка вещей, сдача квестов.
 
         :param quest: get - получить квест, pass - сдать квест
         :param trade: buy equip - покупка снаряж, sell collectable - продажа трофеев
@@ -356,34 +372,17 @@ class NPC(Character):
         elif trade:
             trade = trade.replace(' ', '_')
             if 'buy' in trade and self.sell_items:
-                if 'equip' in trade:
+                if 'equip' in trade:  # Выборка предметов
                     item = choice([i for i in self.sell_items if i.type == 'equipment'])
                 elif 'collectable' in trade:
                     item = choice([i for i in self.sell_items if i.type == 'collectable'])
                 else:
                     item = choice(self.sell_items)
                 price = item.price
-                if price > 5:
+                if price > 5:  # Рандомизация цены
                     price += randint(-4 - price // 5, 4 + price // 5)
-                i = Handler.get_dialog(f'trade_{trade}')
-                params = {}
-                for p in i[3].split(','):
-                    if p.strip() == 'item_name':
-                        params['item_name'] = item.name
-                    elif p.strip() == 'item_price':
-                        params['item_price'] = price
-                text = [i[2].format(**params)]
-                if hero_need_item_buy(Hero.hero_object, item):
-                    if Hero.hero_object.coins >= price:
-                        item.price = price
-                        Hero.hero_object.inventory.append([item])
-                        Hero.hero_object.coins -= price
-                        Hero.hero_object.onBuyItem(item)
-                        text.append('Согласен!')
-                    else:
-                        text.append('У меня нет на это денег.')
-                else:
-                    text.append('Не')
+                # --- Установка текста на отображение и покупка
+                while True:
                     i = Handler.get_dialog(f'trade_{trade}')
                     params = {}
                     for p in i[3].split(','):
@@ -392,7 +391,6 @@ class NPC(Character):
                         elif p.strip() == 'item_price':
                             params['item_price'] = price
                     text = [i[2].format(**params)]
-                    item = choice([i for i in self.sell_items if i.type == 'equipment'])
                     if hero_need_item_buy(Hero.hero_object, item):
                         if Hero.hero_object.coins >= price:
                             item.price = price
@@ -400,10 +398,9 @@ class NPC(Character):
                             Hero.hero_object.coins -= price
                             Hero.hero_object.onBuyItem(item)
                             text.append('Согласен!')
+                            break
                         else:
                             text.append('У меня нет на это денег.')
-                    else:
-                        text.append('Не')
                 left(Hero.hero_object.velocity, Hero.hero_object.rect)
                 self.app.dialog = Dialog(Hero.hero_object, self, text)
             elif 'sell' in trade:
@@ -442,7 +439,7 @@ class NPC(Character):
     def update(self):
         if not self.app.dialog:
             self.is_moving = True
-        if (datetime.now() - self.lasttime).microseconds > 800000 - 600000 * Hero.update_boost and self.is_moving:
+        if (datetime.now() - self.lasttime).total_seconds() > 0.8 - 0.6 * Hero.update_boost and self.is_moving:
             self.lasttime = datetime.now()
             if self.structure:
                 choice(self.ACTIONS)(self.rect, None,
@@ -496,7 +493,7 @@ class Enemy(Character):
         del self
 
     def update(self):
-        if (datetime.now() - self.lasttime).microseconds > 600000 - 500000 * Hero.update_boost \
+        if (datetime.now() - self.lasttime).total_seconds() > 0.6 - 0.5 * Hero.update_boost \
                 and self.curr_fight is None:
             self.lasttime = datetime.now()
             choice(self.ACTIONS)(self.rect, self.move_to.onWorldPos(),

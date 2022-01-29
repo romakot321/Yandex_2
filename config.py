@@ -13,6 +13,7 @@ HEIGHT = 650
 # нулевые координаты для камеры - WIDTH // 2, HEIGHT // 2 - 25
 BLOCK_SIZE = 50
 FPS = 15
+HERO_TIME_FOR_DRINK = 30
 
 # --- Цвета
 WHITE = (255, 255, 255)
@@ -235,7 +236,8 @@ class Tendency:
             if info[0] == 'like_item':
                 self.info = (info[0],)
 
-    def text(self):
+    def text(self) -> str:
+        """Полное описание"""
         if self.type == 'decision':
             if self.info[0] == 'like_item':
                 return self.name + ' ' + self.info[1].name
@@ -311,11 +313,11 @@ structures_list = {
 }
 structure_items_list = {
     'House': [
-        (3, Item.getItem('золото')),
+        (6, Item.getItem('золото')),
         (1, Item.getItem('стеклянный меч')),
-        (5, Item.getItem('кости')),
-        (5, Item.getItem('кирпич пыли')),
-        (3, Item.getItem('Топорик'))
+        (9, Item.getItem('кости')),
+        (9, Item.getItem('кирпич пыли')),
+        (4, Item.getItem('Топорик'))
     ],
     'Holy ruins': [
         (1, Item.getItem('Белое золото')),
