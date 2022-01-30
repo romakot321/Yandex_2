@@ -6,7 +6,6 @@ from typing import List, Union
 import pygame
 
 from item import Item
-from DBHandler import Handler
 
 WIDTH = 800
 HEIGHT = 650
